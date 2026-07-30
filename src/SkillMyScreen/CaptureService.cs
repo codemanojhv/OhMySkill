@@ -167,6 +167,7 @@ public sealed class RecordingController : IDisposable
     private readonly IntPtr _window;
     private int _frame;
     private bool _stopped;
+    private bool _audioRedacted;
     public RecordingTrace Trace { get; }
     public string TemporaryFolder => _store.Folder;
     public byte[] AudioWav { get; private set; } = [];
@@ -238,7 +239,55 @@ public sealed class RecordingController : IDisposable
             }
             Trace.Events[i] = item with { Detail = "redacted by user", Target = null, FramePath = null, Redacted = true };
         }
+        _audioRedacted = true;
+        Trace.HasAudio = false;
         Trace.Notes.Add("User redacted the most recent recording window.");
+        Trace.Notes.Add("Audio was discarded conservatively because the recorder cannot safely segment microphone samples by timestamp.");
+    }
+
+    public IReadOnlyList<FrameEvidence> ReadFrameEvidence(int maxFrames = 8)
+    {
+        var result = new List<FrameEvidence>();
+        var candidates = Trace.Events
+            .Where(e => !e.Redacted && !string.IsNullOrWhiteSpace(e.FramePath))
+            .GroupBy(e => e.FramePath!, StringComparer.Ordinal)
+            .Select(group => group.First())
+            .OrderBy(e => e.ElapsedMilliseconds)
+            .ToList();
+
+        var limit = Math.Max(1, maxFrames);
+        var selected = new List<TraceEvent>();
+        void AddCandidate(TraceEvent item)
+        {
+            if (selected.Count < limit && !selected.Contains(item)) selected.Add(item);
+        }
+        if (candidates.Count > 0)
+        {
+            AddCandidate(candidates[0]);
+            AddCandidate(candidates[^1]);
+            foreach (var item in candidates.Where(item => item.Detail?.Contains("marker", StringComparison.OrdinalIgnoreCase) == true || item.Detail?.Contains("click", StringComparison.OrdinalIgnoreCase) == true).Take(Math.Max(0, limit - 2)))
+                AddCandidate(item);
+            for (var i = 1; i < limit - 1; i++)
+            {
+                var index = (int)Math.Round(i * (candidates.Count - 1d) / (limit - 1));
+                AddCandidate(candidates[Math.Clamp(index, 0, candidates.Count - 1)]);
+            }
+        }
+        selected = selected.OrderBy(item => item.ElapsedMilliseconds).ToList();
+
+        foreach (var item in selected)
+        {
+            try
+            {
+                var png = _store.ReadFrame(item.FramePath!);
+                if (png.Length > 0) result.Add(new FrameEvidence(item.ElapsedMilliseconds, item.Detail ?? "key frame", png));
+            }
+            catch (Exception ex)
+            {
+                Trace.Notes.Add("Frame evidence warning: " + ex.Message);
+            }
+        }
+        return result;
     }
 
     public void Stop()
@@ -250,6 +299,7 @@ public sealed class RecordingController : IDisposable
         Trace.EndedAt = DateTimeOffset.Now;
         Trace.Events.Add(new TraceEvent(_clock.ElapsedMilliseconds, TraceEventKind.SessionStopped, "Recording finished", null, null, null, null));
         AudioWav = _microphone.StopAndGetWav();
+        if (_audioRedacted) AudioWav = [];
         _store.WriteAudio(AudioWav);
         _store.WriteTrace(Trace);
     }

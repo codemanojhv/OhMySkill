@@ -137,23 +137,29 @@ public partial class MainWindow : Window
             var trace = completed.Trace;
             _recording = null;
             _completedRecording = completed;
-            ReviewStatus.Text = "Building a local draft from the captured interaction timeline…";
+            ReviewStatus.Text = "Using narration, interaction context, and visual evidence to understand the user's intent…";
             SetPanel(ReviewPanel);
-            if (completed.AudioWav.Length > 0 && _settings.UseAi)
+            var frames = completed.ReadFrameEvidence();
+            if (completed.AudioWav.Length > 0)
             {
                 try
                 {
                     var transcript = await _provider.TranscribeAsync(completed.AudioWav, _settings);
-                    if (!string.IsNullOrWhiteSpace(transcript)) trace.Transcript.Add(new TranscriptSegment(0, trace.Events.LastOrDefault()?.ElapsedMilliseconds ?? 0, transcript, 0.8));
+                    if (!string.IsNullOrWhiteSpace(transcript))
+                    {
+                        trace.Transcript.Add(new TranscriptSegment(0, trace.Events.LastOrDefault()?.ElapsedMilliseconds ?? 0, transcript, _settings.UseAi ? 0.85 : 0.65));
+                        trace.Notes.Add("Narration was transcribed and included in intent analysis.");
+                    }
+                    else trace.Notes.Add("Narration was captured, but no transcript was available.");
                 }
                 catch (Exception ex) { trace.Notes.Add("Transcription warning: " + ex.Message); }
             }
             _draft = DraftFactory.FromTrace(trace);
             try
             {
-                var aiDraft = await _provider.GenerateDraftAsync(trace, _settings);
+                var aiDraft = await _provider.GenerateDraftAsync(trace, _settings, frames, completed.AudioWav);
                 if (aiDraft is not null) _draft = aiDraft;
-                ReviewStatus.Text = "Review every step. Low-confidence steps should be corrected before saving.";
+                ReviewStatus.Text = $"Used {trace.Events.Count} timeline events, {frames.Count} visual frames, and {(trace.Transcript.Count > 0 ? "narration" : "no transcript")}. Review every step before saving.";
             }
             catch (Exception ex)
             {
@@ -166,7 +172,7 @@ public partial class MainWindow : Window
 
     private void LoadDraftIntoReview(SkillDraft draft)
     {
-        ReviewNameBox.Text = draft.Name; ReviewDescriptionBox.Text = draft.Description; ReviewGoalBox.Text = draft.Goal;
+        ReviewNameBox.Text = draft.Name; ReviewDescriptionBox.Text = draft.Description; ReviewIntentBox.Text = draft.Intent; ReviewGoalBox.Text = draft.Goal;
         ReviewInputsBox.Text = string.Join(Environment.NewLine, draft.Inputs.Select(i => $"{i.Name} | {i.Description} | secret={(i.Secret ? "true" : "false")}"));
         ReviewProcedureBox.Text = string.Join(Environment.NewLine, draft.Procedure.Select(s => s.Instruction));
         ReviewSafetyBox.Text = string.Join(Environment.NewLine, draft.Safety);
@@ -180,7 +186,7 @@ public partial class MainWindow : Window
         var draft = _draft ?? new SkillDraft();
         draft.Name = SkillName.Slugify(ReviewNameBox.Text);
         draft.Title = string.IsNullOrWhiteSpace(ReviewNameBox.Text) ? "Computer workflow" : ReviewNameBox.Text.Trim();
-        draft.Description = ReviewDescriptionBox.Text.Trim(); draft.Goal = ReviewGoalBox.Text.Trim();
+        draft.Description = ReviewDescriptionBox.Text.Trim(); draft.Intent = ReviewIntentBox.Text.Trim(); draft.Goal = ReviewGoalBox.Text.Trim();
         draft.Inputs = ReviewInputsBox.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(line =>
         {
             var parts = line.Split('|', StringSplitOptions.TrimEntries);

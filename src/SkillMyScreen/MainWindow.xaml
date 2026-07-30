@@ -53,7 +53,7 @@
             </ComboBox>
             <Label Content="Window (used for selected-window capture)" />
             <ComboBox x:Name="WindowBox" DisplayMemberPath="Title" />
-            <TextBlock Text="Microphone is captured only while recording. Ordinary typed characters are not persisted." Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,12,0,20" />
+            <TextBlock Text="Microphone is captured only while recording. Narration is transcribed locally or through the selected provider and used to infer intent. Ordinary typed characters are not persisted." Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,12,0,20" />
             <StackPanel Orientation="Horizontal">
               <Button Content="Start Recording" Click="StartRecording_Click" Background="{StaticResource AccentDarkBrush}" />
               <Button Content="Cancel" Click="Home_Click" />
@@ -69,7 +69,7 @@
             </Border>
             <StackPanel Orientation="Horizontal">
               <Button Content="Mark Step" Click="MarkStep_Click" />
-              <Button Content="Redact Last 15 Seconds" Click="Redact_Click" />
+              <Button Content="Redact Last 15 Seconds" ToolTip="Removes recent frames and events; the complete microphone recording is discarded for safety." Click="Redact_Click" />
               <Button Content="Finish &amp; Build Draft" Click="FinishRecording_Click" Background="{StaticResource AccentDarkBrush}" />
             </StackPanel>
             <TextBlock x:Name="EventPreview" TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,22,0,0" />
@@ -82,6 +82,8 @@
             <TextBox x:Name="ReviewNameBox" />
             <Label Content="Description" />
             <TextBox x:Name="ReviewDescriptionBox" />
+            <Label Content="Inferred user intent" />
+            <TextBox x:Name="ReviewIntentBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="55" />
             <Label Content="Goal" />
             <TextBox x:Name="ReviewGoalBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="55" />
             <Label Content="Required inputs (one per line: name | description | secret=true/false)" />

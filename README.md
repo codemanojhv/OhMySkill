@@ -73,9 +73,10 @@ The prompt copied to the clipboard tells the receiving agent to read that exact 
 | Screen evidence | Native GDI-compatible PNG keyframes for the entire display or a selected visible window |
 | Audio | Native <code>winmm</code> microphone capture to a temporary 16 kHz mono WAV buffer |
 | Interaction context | Raw Input mouse events, selected keyboard shortcut categories, foreground process/window, and Windows UI Automation metadata at the cursor |
+| Context assembly | Narration transcript, timing, UI semantics, recorder notes, and representative encrypted screen frames are combined before drafting |
 | Local drafting | Deterministic <code>DraftFactory</code> that produces a reviewable <code>SkillDraft</code> without a network call |
-| BYOK drafting | OpenAI-compatible chat completions, Anthropic Messages, and Google Gemini <code>generateContent</code> request paths |
-| BYOK transcription | OpenAI-compatible <code>/audio/transcriptions</code> path; model defaults include <code>whisper-1</code>, Groq Whisper, and Mistral Voxtral options |
+| BYOK drafting | Multimodal OpenAI-compatible chat completions, Anthropic Messages images, and Google Gemini <code>generateContent</code> with visual/audio evidence where supported |
+| Transcription | OpenAI-compatible <code>/audio/transcriptions</code>, Gemini inline-audio transcription, and Windows Speech fallback when no remote transcription path is available |
 | Provider catalog | OpenAI, Anthropic, Gemini, OpenRouter, Nous Portal, Groq, Mistral, xAI, DeepSeek, Cerebras, Together, Fireworks, NovitaAI, GLM, Moonshot, MiniMax, Qwen, Hugging Face, NVIDIA NIM, Azure AI Foundry, OpenCode Zen/Go, DeepInfra, Ollama Cloud, Ollama, LM Studio, and custom OpenAI-compatible endpoints |
 | Privacy controls | Explicit recording warning, recent-window redaction, encrypted temporary artifacts, and automatic cleanup after a successful save |
 | Output | One Markdown skill with YAML frontmatter plus a copyable agent prompt |
@@ -118,6 +119,8 @@ While recording, encrypted temporary data is written under:
 
 Each session uses a random AES-GCM key. The key is protected with Windows DPAPI for the current user. After <code>SKILL.md</code> is saved, the temporary session folder is deleted.
 
+Redacting the recent recording window also discards the complete microphone buffer for that session. The recorder cannot safely split the native PCM stream by timestamp, so it chooses the conservative behavior of removing all audio rather than risking retention of a private utterance.
+
 ### Settings and API keys
 
 Provider settings are stored at:
@@ -131,8 +134,8 @@ The API key is stored as DPAPI-protected ciphertext, not as clear text. Keys are
 ### What is and is not sent to a provider
 
 - No provider call is made when AI is disabled.
-- When AI is enabled, the captured compiler prompt and optional transcript are sent to the selected endpoint.
-- Temporary PNG/audio files are not uploaded by the current provider service.
+- When AI is enabled, the captured compiler prompt, optional transcript, and representative visual/audio evidence may be sent to the selected endpoint.
+- Encrypted files are decrypted only in memory for provider requests; the user should assume that enabled multimodal providers can receive the attached frames and audio.
 - Provider retention, logging, and training policies are outside this application; choose a provider and account appropriate for the data being demonstrated.
 
 ## Windows permissions and compatibility
@@ -237,6 +240,9 @@ description: "A short description of the demonstrated workflow."
 
 # Example skill
 
+## Intent
+...
+
 ## Goal
 ...
 
@@ -290,7 +296,7 @@ This is local evidence, not a claim that every provider, Windows edition, microp
 ## Known limitations
 
 - Capture is currently event- and keyframe-based; it is not a full video recorder.
-- Narration is captured as audio, but transcription requires a configured compatible provider. There is no bundled offline speech model yet.
+- Windows Speech fallback depends on an installed Windows recognition language and may return no transcript on systems without a configured recognizer.
 - OCR, clipboard semantics, drag paths, application-specific APIs, and rich text entry are not yet modeled as first-class events.
 - Raw Input intentionally records only high-level mouse actions and selected shortcut keys; it does not reconstruct every keystroke.
 - Provider catalog entries do not guarantee identical API semantics. Live model and endpoint tests are still required per provider.

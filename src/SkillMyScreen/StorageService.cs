@@ -100,6 +100,11 @@ public sealed class SecureSessionStore
         EncryptedFile.Write(Path.Combine(Folder, "frames", name + ".enc"), png, _key);
     }
 
+    public byte[] ReadFrame(string name)
+    {
+        return EncryptedFile.Read(Path.Combine(Folder, "frames", name + ".enc"), _key);
+    }
+
     public void DeleteAfterSave()
     {
         if (Directory.Exists(Folder)) Directory.Delete(Folder, true);
@@ -152,6 +157,7 @@ public static class SkillRenderer
         sb.AppendLine("---");
         sb.AppendLine();
         sb.AppendLine($"# {draft.Title.Trim()}");
+        Section(sb, "Intent", [draft.Intent]);
         Section(sb, "Goal", [draft.Goal]);
         Section(sb, "Required inputs", draft.Inputs.Count == 0 ? ["- No explicit runtime inputs were identified."] : draft.Inputs.Select(i => $"- `{i.Name}`: {i.Description}{(i.Secret ? " (secret; never print or store the value)" : "")}"));
         Section(sb, "Preconditions", draft.Preconditions);

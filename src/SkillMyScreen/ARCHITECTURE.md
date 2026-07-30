@@ -7,7 +7,10 @@ flowchart LR
     USER[User demonstration] --> CAPTURE[Native WPF recorder]
     CAPTURE --> TRACE[Timestamped events, keyframes, and narration]
     TRACE --> PRIVACY[Local redaction and encrypted temporary storage]
-    PRIVACY --> AI[BYOK provider or local draft]
+    PRIVACY --> CONTEXT[Narration transcript, UI semantics, timing, notes, and representative frames]
+    CONTEXT --> AUDIO[Provider or Windows speech transcription]
+    AUDIO --> CONTEXT
+    CONTEXT --> AI[Multimodal BYOK provider or local draft]
     AI --> REVIEW[User review and correction]
     REVIEW --> OUTPUT[Documents/SkillMyScreen/skills/<slug>/SKILL.md]
     OUTPUT --> PROMPT[Copyable Codex/OpenCode/Claude/Hermes prompt]

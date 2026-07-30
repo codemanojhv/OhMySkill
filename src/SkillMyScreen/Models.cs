@@ -54,6 +54,8 @@ public sealed record TraceEvent(
 
 public sealed record TranscriptSegment(long StartMilliseconds, long EndMilliseconds, string Text, double Confidence = 1);
 
+public sealed record FrameEvidence(long ElapsedMilliseconds, string Reason, byte[] Png);
+
 public sealed class RecordingTrace
 {
     public Guid Id { get; init; } = Guid.NewGuid();
@@ -83,6 +85,7 @@ public sealed class SkillDraft
     public string Name { get; set; } = "computer-workflow";
     public string Title { get; set; } = "Computer workflow";
     public string Description { get; set; } = "Follow the demonstrated computer workflow.";
+    public string Intent { get; set; } = "Complete the user's demonstrated computer workflow.";
     public string Goal { get; set; } = "Complete the demonstrated computer workflow.";
     public List<SkillInput> Inputs { get; set; } = [];
     public List<string> Preconditions { get; set; } = [];
