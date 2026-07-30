@@ -37,3 +37,16 @@ public static class LocalSpeechTranscriber
         return segments.Count == 0 ? null : string.Join(" ", segments);
     }
 }
+
+public static class TranscriptSegmenter
+{
+    public static IReadOnlyList<TranscriptSegment> Split(string text, long durationMilliseconds, double confidence, string source = "provider")
+    {
+        var sentences = text.Split(['.', '!', '?', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (sentences.Length == 0) return [];
+        var duration = Math.Max(1000, durationMilliseconds);
+        var slice = Math.Max(1000, duration / sentences.Length);
+        return sentences.Select((sentence, index) =>
+            new TranscriptSegment(Math.Min(duration, index * slice), Math.Min(duration, (index + 1) * slice), sentence, confidence)).ToArray();
+    }
+}

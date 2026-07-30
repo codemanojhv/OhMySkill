@@ -17,8 +17,10 @@ public enum TraceEventKind
     Click,
     DoubleClick,
     RightClick,
+    Drag,
     Scroll,
     Shortcut,
+    TextEntry,
     FocusChanged,
     WindowChanged,
     KeyFrame,
@@ -54,7 +56,71 @@ public sealed record TraceEvent(
 
 public sealed record TranscriptSegment(long StartMilliseconds, long EndMilliseconds, string Text, double Confidence = 1);
 
-public sealed record FrameEvidence(long ElapsedMilliseconds, string Reason, byte[] Png);
+public enum FrameRole
+{
+    Initial,
+    Before,
+    After,
+    Marker,
+    Final,
+    Periodic
+}
+
+public sealed record FrameEvidence(
+    long ElapsedMilliseconds,
+    string Reason,
+    byte[] Png,
+    string? Id = null,
+    FrameRole Role = FrameRole.Periodic,
+    Guid? ActionId = null);
+
+public sealed record ActionEvidence(
+    Guid Id,
+    int Order,
+    long StartMilliseconds,
+    long EndMilliseconds,
+    TraceEventKind Kind,
+    string? Detail,
+    UiTarget? Target,
+    FrameEvidence? Before,
+    FrameEvidence? After,
+    IReadOnlyList<TranscriptSegment> NearbyNarration,
+    bool Redacted = false,
+    bool IncludeInSkill = true,
+    double Confidence = 0.7);
+
+public sealed record AudioChunkEvidence(
+    long StartMilliseconds,
+    long EndMilliseconds,
+    string Path,
+    bool Redacted = false);
+
+public sealed record AudioWindowEvidence(long StartMilliseconds, long EndMilliseconds, byte[] Wav);
+
+public sealed record ActionUnderstanding(
+    Guid ActionId,
+    int Order,
+    bool IncludeInSkill,
+    string UserIntent,
+    string Instruction,
+    string VisibleBefore,
+    string ObservedChange,
+    string ExpectedResult,
+    string? PossibleMistake,
+    double Confidence,
+    string? Uncertainty);
+
+public sealed class EvidenceCoverage
+{
+    public int TotalActions { get; set; }
+    public int ActionsWithFramePairs { get; set; }
+    public int ActionsWithNarration { get; set; }
+    public string AudioMode { get; set; } = "Unavailable";
+    public string VisionMode { get; set; } = "Unavailable";
+    public string Provider { get; set; } = "Local draft";
+    public string Model { get; set; } = "";
+    public List<string> Warnings { get; } = [];
+}
 
 public sealed class RecordingTrace
 {
@@ -65,10 +131,14 @@ public sealed class RecordingTrace
     public CaptureMode CaptureMode { get; init; }
     public string? CaptureTarget { get; init; }
     public List<TraceEvent> Events { get; } = [];
+    public List<ActionEvidence> Actions { get; } = [];
+    public List<ActionUnderstanding> Interpretations { get; } = [];
+    public List<AudioChunkEvidence> AudioChunks { get; } = [];
     public List<TranscriptSegment> Transcript { get; } = [];
     public List<string> Notes { get; } = [];
     public bool HasAudio { get; set; }
     public bool KeepRecording { get; set; }
+    public EvidenceCoverage Evidence { get; } = new();
 }
 
 public sealed record SkillInput(string Name, string Description, string Type = "text", bool Required = true, bool Secret = false);

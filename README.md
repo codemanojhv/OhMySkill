@@ -1,10 +1,14 @@
 # SkillMyScreen
 
+The v0.2 desktop shell uses the supplied cyan SkillMyScreen mark for dark and light surfaces, with monochrome variants for high-contrast contexts. Branding assets live under `src/SkillMyScreen/Assets/Branding`.
+
 SkillMyScreen is a local-first Windows desktop application that turns a demonstrated computer workflow into a reviewed, portable <code>SKILL.md</code> file for an AI agent.
 
 It is designed for work that happens anywhere on a Windows computer—not only in a browser. Demonstrate a task in a desktop application, file manager, terminal, browser, or mixed workflow; explain the intent through the microphone; review the generated instructions; then save the skill locally and paste the included agent prompt into Codex, OpenCode, Claude Code, Hermes, or another agent that can use the required computer tools.
 
-> **Status:** early pre-release build. The vertical slice is implemented and runnable, but provider compatibility, capture fidelity, packaging, signing, and broad hardware coverage still need production hardening.
+The v0.2 workflow targets the user-visible “Record a Skill” pattern: record a demonstration with narration, interpret each action, synthesize the full trajectory, review the result, and save a portable skill. It does not claim to reproduce another product’s unpublished internal implementation.
+
+> **Status:** the v0.2 local implementation is complete. It uses synchronized action-level audio/visual interpretation, full-trajectory context, synthesis, and an evidence critic. Release signing and live provider/model validation remain distribution gates.
 
 ## Product boundary
 
@@ -17,6 +21,8 @@ SkillMyScreen deliberately stops at the portable skill document.
 - It does **not** execute the skill, inject mouse or keyboard actions, host an MCP server, install a browser, run a background service, or create a database.
 
 The receiving agent must already have the tools and permissions needed to execute the instructions. This keeps the builder small, inspectable, and safer to run on a personal Windows machine.
+
+See [INSTALLATION.md](INSTALLATION.md) for portable EXE download, architecture selection, privacy access, source builds, and SmartScreen guidance.
 
 ## How it works
 
@@ -42,18 +48,18 @@ flowchart TB
 
 1. Choose **Entire display** or a visible window.
 2. Start recording and perform the task normally.
-3. SkillMyScreen captures periodic keyframes, frames after click events, microphone PCM audio, and high-level interaction context.
+3. SkillMyScreen samples a short rolling frame buffer, stores a perceptually settled before/after pair for each logical action, keeps bounded trajectory keyframes, records encrypted timestamped microphone chunks, and captures high-level interaction context.
 4. Use **Mark Step** when an action is especially meaningful.
 5. Use **Redact Last 15 Seconds** if the recent portion should not be retained.
 6. Finish the recording to build a draft.
 
-The recorder intentionally does not persist ordinary typed characters. It records selected keyboard shortcut categories (for example, Enter, Tab, Escape, and modifier keys) and semantic target information when Windows UI Automation exposes it. Never type passwords, API keys, OTPs, or private values during a recording; redact immediately if one is entered accidentally.
+The recorder intentionally does not persist ordinary typed characters. It groups typing into semantic text-entry bursts, records shortcuts such as Enter, Tab, Escape, and modifier combinations, and attaches focused-control metadata when Windows UI Automation exposes it. Password targets are marked protected and never include their values. Redact immediately if sensitive screen or narration evidence appears accidentally.
 
 ### Drafting
 
 With AI disabled, the app converts the captured event timeline into a deterministic draft with explicit safety, verification, recovery, and uncertainty sections.
 
-With AI enabled, the app sends the captured compiler prompt to the selected provider using the key saved for the current Windows user. The response must be JSON matching the <code>SkillDraft</code> contract. If the provider fails or returns invalid data, SkillMyScreen keeps the deterministic local draft available instead of claiming that AI succeeded.
+With AI enabled, the app works in three bounded stages: up to six actions are interpreted per multimodal request using paired frames, nearby narration, interaction metadata, and native audio where supported; the ordered interpretations and full transcript are synthesized into a <code>SkillDraft</code>; then a critic checks the draft for omissions, unsupported steps, run-specific values, corrections, safety, and observable verification. Invalid JSON or an invalid draft is rejected. If a provider stage fails, the app records the downgrade and keeps deterministic local evidence available.
 
 ### Review and output
 
@@ -70,12 +76,12 @@ The prompt copied to the clipboard tells the receiving agent to read that exact 
 | Area | Current implementation |
 | --- | --- |
 | Computer scope | Windows desktop workflows across browsers, desktop applications, file managers, terminals, and mixed workflows |
-| Screen evidence | Native GDI-compatible PNG keyframes for the entire display or a selected visible window |
-| Audio | Native <code>winmm</code> microphone capture to a temporary 16 kHz mono WAV buffer |
-| Interaction context | Raw Input mouse events, selected keyboard shortcut categories, foreground process/window, and Windows UI Automation metadata at the cursor |
-| Context assembly | Narration transcript, timing, UI semantics, recorder notes, and representative encrypted screen frames are combined before drafting |
+| Screen evidence | Native GDI-compatible 4 FPS rolling buffer, perceptually settled encrypted before/after evidence per action, and bounded change-aware trajectory keyframes |
+| Audio | Native <code>winmm</code> microphone capture to encrypted five-second 16 kHz mono chunks, live input level, and 30-second transcription windows |
+| Interaction context | Raw Input clicks, double-clicks, drags, scroll bursts, shortcuts, privacy-safe text-entry bursts, foreground process/window, and Windows UI Automation targets |
+| Context assembly | Timestamped narration is attached to actions; paired frames and optional native audio are interpreted in six-action batches; the complete ordered trajectory is then synthesized and critic-checked |
 | Local drafting | Deterministic <code>DraftFactory</code> that produces a reviewable <code>SkillDraft</code> without a network call |
-| BYOK drafting | Multimodal OpenAI-compatible chat completions, Anthropic Messages images, and Google Gemini <code>generateContent</code> with visual/audio evidence where supported |
+| BYOK drafting | Action interpretation, global synthesis, and critic refinement through OpenAI-compatible chat completions, Anthropic Messages images, and Google Gemini <code>generateContent</code>; native audio is attempted only for OpenAI and Gemini |
 | Transcription | OpenAI-compatible <code>/audio/transcriptions</code>, Gemini inline-audio transcription, and Windows Speech fallback when no remote transcription path is available |
 | Provider catalog | OpenAI, Anthropic, Gemini, OpenRouter, Nous Portal, Groq, Mistral, xAI, DeepSeek, Cerebras, Together, Fireworks, NovitaAI, GLM, Moonshot, MiniMax, Qwen, Hugging Face, NVIDIA NIM, Azure AI Foundry, OpenCode Zen/Go, DeepInfra, Ollama Cloud, Ollama, LM Studio, and custom OpenAI-compatible endpoints |
 | Privacy controls | Explicit recording warning, recent-window redaction, encrypted temporary artifacts, and automatic cleanup after a successful save |
@@ -119,7 +125,7 @@ While recording, encrypted temporary data is written under:
 
 Each session uses a random AES-GCM key. The key is protected with Windows DPAPI for the current user. After <code>SKILL.md</code> is saved, the temporary session folder is deleted.
 
-Redacting the recent recording window also discards the complete microphone buffer for that session. The recorder cannot safely split the native PCM stream by timestamp, so it chooses the conservative behavior of removing all audio rather than risking retention of a private utterance.
+Redacting the recent recording window removes its events, action frames, trajectory frames, transcript associations, and precise PCM time range. The corresponding five-second encrypted audio chunks contain silence for redacted samples before transcription or provider use.
 
 ### Settings and API keys
 
@@ -134,8 +140,8 @@ The API key is stored as DPAPI-protected ciphertext, not as clear text. Keys are
 ### What is and is not sent to a provider
 
 - No provider call is made when AI is disabled.
-- When AI is enabled, the captured compiler prompt, optional transcript, and representative visual/audio evidence may be sent to the selected endpoint.
-- Encrypted files are decrypted only in memory for provider requests; the user should assume that enabled multimodal providers can receive the attached frames and audio.
+- When AI is enabled, each action batch may send its before/after frames, nearby transcript, semantic interaction metadata, and one overlapping audio window when that adapter supports native audio. Synthesis and criticism use the transcript and action interpretations rather than resending the entire recording.
+- Encrypted files are decrypted only in memory for provider requests. The evidence summary states whether vision/native audio was used or whether the request was downgraded to transcript and metadata.
 - Provider retention, logging, and training policies are outside this application; choose a provider and account appropriate for the data being demonstrated.
 
 ## Windows permissions and compatibility
@@ -286,7 +292,7 @@ The current local build has been validated with:
 
 - Release solution build on the x64 development machine.
 - Release solution build on the ARM64 publish target.
-- Built-in self-check for Markdown rendering, prompt path conversion, atomic skill save, and AES-GCM encryption/decryption.
+- Built-in self-check for action/frame mapping, protected text-entry handling, perceptual settle detection, timestamped transcript prompts, Markdown rendering, validated atomic skill save, prompt path conversion, and AES-GCM encryption/decryption.
 - Packaged x64 EXE launch smoke test.
 - Packaged x64 <code>--self-check</code> execution.
 - PE-header verification of both architecture outputs (<code>0x8664</code> x64 and <code>0xAA64</code> ARM64).
@@ -297,23 +303,22 @@ This is local evidence, not a claim that every provider, Windows edition, microp
 
 - Capture is currently event- and keyframe-based; it is not a full video recorder.
 - Windows Speech fallback depends on an installed Windows recognition language and may return no transcript on systems without a configured recognizer.
-- OCR, clipboard semantics, drag paths, application-specific APIs, and rich text entry are not yet modeled as first-class events.
-- Raw Input intentionally records only high-level mouse actions and selected shortcut keys; it does not reconstruct every keystroke.
+- OCR, clipboard semantics, exact drag paths, and application-specific APIs are not first-class evidence sources.
+- Raw Input intentionally records high-level actions and text-entry bursts; it never reconstructs ordinary typed content.
 - Provider catalog entries do not guarantee identical API semantics. Live model and endpoint tests are still required per provider.
-- The current compiler prompt sends a bounded event list and transcript, not all binary frames, to the model.
+- Generic OpenAI-compatible endpoints differ in image, audio, and JSON support. A rejected rich-media request is visibly downgraded to transcript/UI metadata, and each provider/model still needs a live test.
 - Generated skills require human review. A recording is evidence, not proof that every inferred instruction is correct.
 - The application creates instructions only; it does not execute or verify the workflow on the user's behalf.
-- Published binaries are not code-signed and there is no automatic update channel yet.
+- v0.2 release artifacts must be signed before they are called production-ready; unsigned builds are beta artifacts.
 
 ## Roadmap
 
 The next improvements should follow the evidence boundary rather than add an agent runtime:
 
-1. **Capture fidelity:** pause/resume, better window lifecycle tracking, OCR/clipboard signals, richer keyboard and drag semantics, and reliable multi-monitor capture.
-2. **Trust and review:** confidence-aware editing, frame/event review, transcript segments, secret-region masking, and stronger validation of generated Markdown.
-3. **Provider hardening:** provider-specific model defaults, compatible response parsing, retries/timeouts, endpoint diagnostics, and optional offline transcription.
-4. **Distribution:** signed x64/ARM64 installers or portable packages, release automation, update guidance, and Windows compatibility testing across common hardware.
-5. **Documentation and examples:** representative skills for file management, spreadsheet work, desktop forms, terminal workflows, and mixed browser/desktop tasks.
+1. **Provider hardening:** provider-specific model defaults, compatible response parsing, retries/timeouts, endpoint diagnostics, and live capability tests.
+2. **Capture fidelity:** pause/resume, stronger window lifecycle tracking, OCR where it adds evidence, and reliable multi-monitor capture.
+3. **Distribution:** signed x64/ARM64 portable packages, release automation, update guidance, and Windows compatibility testing.
+4. **Examples:** representative skills for file management, spreadsheet work, desktop forms, terminal workflows, and mixed browser/desktop tasks.
 
 ## Contributing
 

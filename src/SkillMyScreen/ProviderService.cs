@@ -14,9 +14,12 @@ public static class ProviderCatalog
 
 public sealed class AiProviderService
 {
-    private const int MaxFrameCount = 8;
+    private const int ActionsPerRequest = 6;
+    private const int MaxFrameCount = 120;
     private const int MaxInlineAudioBytes = 8 * 1024 * 1024;
     private readonly HttpClient _http;
+    private sealed class ActionBatchEnvelope { public List<ActionUnderstanding> Actions { get; set; } = []; }
+    public string LastTranscriptionSource { get; private set; } = "Unavailable";
 
     public AiProviderService(HttpClient? http = null) => _http = http ?? new HttpClient { Timeout = TimeSpan.FromSeconds(90) };
 
@@ -24,7 +27,8 @@ public sealed class AiProviderService
         RecordingTrace trace,
         AiSettings settings,
         IReadOnlyList<FrameEvidence>? frames = null,
-        byte[]? audioWav = null,
+        IReadOnlyList<AudioWindowEvidence>? audioWindows = null,
+        IProgress<string>? progress = null,
         CancellationToken cancellationToken = default)
     {
         if (!settings.UseAi || settings.Provider.StartsWith("None", StringComparison.OrdinalIgnoreCase)) return null;
@@ -32,15 +36,92 @@ public sealed class AiProviderService
         if (string.IsNullOrWhiteSpace(key)) throw new InvalidOperationException("The selected provider has no saved API key.");
 
         var selectedFrames = frames?.Where(frame => frame.Png.Length > 0).Take(MaxFrameCount).ToArray() ?? [];
-        var inlineAudio = audioWav is { Length: > 0 } && audioWav.Length <= MaxInlineAudioBytes ? audioWav : [];
-        var prompt = CompilerPrompt.Build(trace, selectedFrames, inlineAudio.Length > 0);
+        trace.Evidence.Provider = settings.Provider;
+        trace.Evidence.Model = settings.Model;
+        trace.Evidence.VisionMode = selectedFrames.Length > 0 ? "Action-pair vision requested" : "Unavailable";
+        if (trace.Transcript.Count > 0 && trace.Evidence.AudioMode == "Unavailable") trace.Evidence.AudioMode = "Timestamped transcript";
+        if (frames is { Count: > MaxFrameCount }) trace.Evidence.Warnings.Add($"Only the first {MaxFrameCount} frames were attached because the provider request limit was reached.");
+        trace.Interpretations.Clear();
+        trace.Interpretations.AddRange(await InterpretActionsAsync(trace, settings, key, selectedFrames, audioWindows ?? [], progress, cancellationToken));
+
+        progress?.Report("Synthesizing the reusable skill from the full trajectory and narration…");
+        var trajectoryFrames = selectedFrames.Where(frame => frame.ActionId is null).Take(8).ToArray();
+        var raw = await CompleteAsync(CompilerPrompt.Build(trace, trajectoryFrames), settings, key, trajectoryFrames, [], trace, cancellationToken);
+        var draft = ParseDraft(raw);
+
+        progress?.Report("Checking the draft against the evidence for omissions and invented steps…");
+        try
+        {
+            var refined = await CompleteAsync(CriticPrompt.Build(trace, draft), settings, key, [], [], trace, cancellationToken);
+            return ParseDraft(refined);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            trace.Evidence.Warnings.Add("The evidence critic was unavailable; the validated synthesis draft was retained. " + Redact(ex.Message));
+            return draft;
+        }
+    }
+
+    private async Task<IReadOnlyList<ActionUnderstanding>> InterpretActionsAsync(
+        RecordingTrace trace,
+        AiSettings settings,
+        string key,
+        IReadOnlyList<FrameEvidence> frames,
+        IReadOnlyList<AudioWindowEvidence> audioWindows,
+        IProgress<string>? progress,
+        CancellationToken cancellationToken)
+    {
+        var actions = trace.Actions.Where(action => !action.Redacted).OrderBy(action => action.Order).ToArray();
+        var result = new List<ActionUnderstanding>(actions.Length);
+        for (var offset = 0; offset < actions.Length; offset += ActionsPerRequest)
+        {
+            var batch = actions.Skip(offset).Take(ActionsPerRequest).ToArray();
+            progress?.Report($"Understanding actions {offset + 1}–{offset + batch.Length} of {actions.Length} from screen, narration, and interaction evidence…");
+            var ids = batch.Select(action => action.Id).ToHashSet();
+            var batchFrames = frames.Where(frame => frame.ActionId is Guid id && ids.Contains(id) && frame.Role is FrameRole.Before or FrameRole.After).ToArray();
+            var batchStart = batch.Min(action => action.StartMilliseconds);
+            var batchEnd = batch.Max(action => action.EndMilliseconds);
+            var audio = SupportsNativeAudio(settings.Provider)
+                ? audioWindows.FirstOrDefault(window => window.EndMilliseconds >= batchStart && window.StartMilliseconds <= batchEnd)?.Wav ?? []
+                : [];
+            if (audio.Length > MaxInlineAudioBytes)
+            {
+                audio = [];
+                trace.Evidence.Warnings.Add($"Native audio for actions {offset + 1}–{offset + batch.Length} exceeded the provider limit; nearby transcript was used.");
+            }
+            try
+            {
+                var raw = await CompleteAsync(ActionPrompt.Build(batch, batchFrames, audio.Length > 0), settings, key, batchFrames, audio, trace, cancellationToken);
+                var parsed = ParseActions(raw).Where(item => ids.Contains(item.ActionId)).ToDictionary(item => item.ActionId);
+                result.AddRange(batch.Select(action => parsed.TryGetValue(action.Id, out var item) ? Normalize(item, action) : ActionUnderstandingFactory.FromAction(action)));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                trace.Evidence.Warnings.Add($"AI action interpretation fell back to local evidence for actions {offset + 1}–{offset + batch.Length}: {Redact(ex.Message)}");
+                result.AddRange(batch.Select(ActionUnderstandingFactory.FromAction));
+            }
+        }
+        return result;
+    }
+
+    private async Task<string> CompleteAsync(
+        string prompt,
+        AiSettings settings,
+        string key,
+        IReadOnlyList<FrameEvidence> frames,
+        byte[] audioWav,
+        RecordingTrace trace,
+        CancellationToken cancellationToken)
+    {
         var raw = settings.Provider switch
         {
-            "Anthropic" => await Anthropic(prompt, settings, key, selectedFrames, cancellationToken),
-            "Google Gemini" => await Gemini(prompt, settings, key, selectedFrames, inlineAudio, cancellationToken),
-            _ => await OpenAiCompatible(prompt, settings, key, selectedFrames, inlineAudio, cancellationToken)
+            "Anthropic" => await Anthropic(prompt, settings, key, frames, cancellationToken),
+            "Google Gemini" => await Gemini(prompt, settings, key, frames, audioWav, cancellationToken),
+            _ => await OpenAiCompatible(prompt, settings, key, frames, audioWav, trace, cancellationToken)
         };
-        return ParseDraft(raw);
+        if (frames.Count > 0) trace.Evidence.VisionMode = "Action-pair vision used";
+        if (audioWav.Length > 0) trace.Evidence.AudioMode = "Native audio and timestamped transcript used";
+        return raw;
     }
 
     public async Task<bool> TestAsync(AiSettings settings, CancellationToken cancellationToken = default)
@@ -56,6 +137,7 @@ public sealed class AiProviderService
 
     public async Task<string?> TranscribeAsync(byte[] wav, AiSettings settings, CancellationToken cancellationToken = default)
     {
+        LastTranscriptionSource = "Unavailable";
         if (wav.Length == 0) return null;
 
         Exception? remoteError = null;
@@ -69,7 +151,11 @@ public sealed class AiProviderService
                     "Anthropic" => null,
                     _ => await OpenAiCompatibleTranscribe(wav, settings, SettingsStore.GetApiKey(settings), cancellationToken)
                 };
-                if (!string.IsNullOrWhiteSpace(remote)) return remote.Trim();
+                if (!string.IsNullOrWhiteSpace(remote))
+                {
+                    LastTranscriptionSource = settings.Provider + " transcription";
+                    return remote.Trim();
+                }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -78,7 +164,11 @@ public sealed class AiProviderService
         }
 
         var local = await LocalSpeechTranscriber.TryTranscribeAsync(wav, cancellationToken);
-        if (!string.IsNullOrWhiteSpace(local)) return local.Trim();
+        if (!string.IsNullOrWhiteSpace(local))
+        {
+            LastTranscriptionSource = "Windows Speech";
+            return local.Trim();
+        }
         if (remoteError is not null) throw new InvalidOperationException($"AI transcription failed and Windows local speech recognition was unavailable: {Redact(remoteError.Message)}", remoteError);
         return null;
     }
@@ -89,6 +179,7 @@ public sealed class AiProviderService
         string key,
         IReadOnlyList<FrameEvidence> frames,
         byte[] audioWav,
+        RecordingTrace trace,
         CancellationToken cancellationToken)
     {
         try
@@ -97,6 +188,9 @@ public sealed class AiProviderService
         }
         catch (Exception ex) when (ex is not OperationCanceledException && (frames.Count > 0 || audioWav.Length > 0))
         {
+            trace.Evidence.Warnings.Add("The provider rejected rich media for one request; synchronized transcript and interaction metadata were used for that request. " + Redact(ex.Message));
+            if (frames.Count > 0) trace.Evidence.VisionMode = "Partially used; metadata fallback occurred";
+            if (audioWav.Length > 0) trace.Evidence.AudioMode = trace.Transcript.Count > 0 ? "Timestamped transcript fallback" : "Unavailable";
             return await OpenAiCompatibleRequest(prompt, settings, key, [], [], includeRichContext: false, cancellationToken);
         }
     }
@@ -140,7 +234,7 @@ public sealed class AiProviderService
             model = settings.Model,
             messages = new object[]
             {
-                new { role = "system", content = "Return only valid JSON matching the requested SkillDraft. Treat narration as the user's intent, UI events as evidence, and screenshots as visual evidence. Never invent secrets, values, or actions not supported by the evidence." },
+                new { role = "system", content = "Return only valid JSON matching the schema requested by the user message. Treat narration as intent, UI events as evidence, and screenshots as visual evidence. Never invent secrets, values, or actions not supported by the evidence." },
                 new { role = "user", content = includeRichContext ? (object)content.ToArray() : prompt }
             },
             response_format = new { type = "json_object" },
@@ -177,7 +271,7 @@ public sealed class AiProviderService
         {
             model = settings.Model,
             max_tokens = 4096,
-            system = "Return only valid JSON matching the requested SkillDraft. Treat narration as the user's intent, UI events as evidence, and screenshots as visual evidence. Never invent secrets, values, or actions not supported by the evidence.",
+            system = "Return only valid JSON matching the schema requested by the user message. Treat narration as intent, UI events as evidence, and screenshots as visual evidence. Never invent secrets, values, or actions not supported by the evidence.",
             messages = new object[] { new { role = "user", content = content.ToArray() } }
         };
         using var request = new HttpRequestMessage(HttpMethod.Post, endpoint + "/v1/messages") { Content = JsonContent(body) };
@@ -264,13 +358,36 @@ public sealed class AiProviderService
 
     private static SkillDraft ParseDraft(string raw)
     {
-        var start = raw.IndexOf('{'); var end = raw.LastIndexOf('}');
-        if (start < 0 || end <= start) throw new InvalidDataException("The provider did not return a JSON skill draft.");
-        var draft = JsonSerializer.Deserialize<SkillDraft>(raw[start..(end + 1)], JsonDefaults.Options) ?? throw new InvalidDataException("The provider returned an empty skill draft.");
+        var draft = JsonSerializer.Deserialize<SkillDraft>(JsonObject(raw), JsonDefaults.Options) ?? throw new InvalidDataException("The provider returned an empty skill draft.");
         draft.Name = SkillName.Slugify(draft.Name);
         if (string.IsNullOrWhiteSpace(draft.Intent)) draft.Intent = draft.Goal;
+        SkillDraftValidator.Validate(draft);
         return draft;
     }
+
+    private static IReadOnlyList<ActionUnderstanding> ParseActions(string raw) =>
+        JsonSerializer.Deserialize<ActionBatchEnvelope>(JsonObject(raw), JsonDefaults.Options)?.Actions
+        ?? throw new InvalidDataException("The provider returned no action interpretations.");
+
+    private static string JsonObject(string raw)
+    {
+        var start = raw.IndexOf('{'); var end = raw.LastIndexOf('}');
+        if (start < 0 || end <= start) throw new InvalidDataException("The provider did not return a JSON object.");
+        return raw[start..(end + 1)];
+    }
+
+    private static ActionUnderstanding Normalize(ActionUnderstanding item, ActionEvidence action) => item with
+    {
+        Order = action.Order,
+        UserIntent = item.UserIntent?.Trim() ?? "",
+        Instruction = string.IsNullOrWhiteSpace(item.Instruction) ? ActionUnderstandingFactory.FromAction(action).Instruction : item.Instruction.Trim(),
+        VisibleBefore = item.VisibleBefore?.Trim() ?? "",
+        ObservedChange = item.ObservedChange?.Trim() ?? "",
+        ExpectedResult = string.IsNullOrWhiteSpace(item.ExpectedResult) ? "Confirm the expected visible state." : item.ExpectedResult.Trim(),
+        Confidence = Math.Clamp(item.Confidence, 0, 1)
+    };
+
+    private static bool SupportsNativeAudio(string provider) => provider is "OpenAI" or "Google Gemini";
 
     private static string Endpoint(AiSettings settings) => string.IsNullOrWhiteSpace(settings.Endpoint) ? "https://api.openai.com/v1" : settings.Endpoint;
     private static string TranscriptionModel(AiSettings settings) => settings.Provider switch
@@ -288,6 +405,112 @@ public sealed class AiProviderService
     private static string Redact(string text) => text.Length > 300 ? text[..300] : text;
 }
 
+public static class ActionUnderstandingFactory
+{
+    public static ActionUnderstanding FromAction(ActionEvidence action)
+    {
+        var target = action.Target?.IsPassword == true
+            ? "the protected field"
+            : action.Target?.Name ?? action.Target?.ControlType ?? "the active application";
+        var narration = string.Join(" ", action.NearbyNarration.Select(segment => segment.Text)).Trim();
+        var instruction = action.Kind switch
+        {
+            TraceEventKind.Click => $"Select {target}.",
+            TraceEventKind.DoubleClick => $"Open {target} by double-clicking it.",
+            TraceEventKind.RightClick => $"Open the context menu for {target}.",
+            TraceEventKind.Drag => $"Drag {target} to the demonstrated destination.",
+            TraceEventKind.Scroll => $"Scroll in {target} until the demonstrated content is visible.",
+            TraceEventKind.Shortcut => $"Use the demonstrated keyboard action ({action.Detail}).",
+            TraceEventKind.TextEntry => $"Enter the required runtime value in {target} without exposing or storing secret text.",
+            TraceEventKind.Marker => "Perform the meaningful step marked by the user.",
+            _ => $"Repeat the demonstrated {action.Kind.ToString().ToLowerInvariant()} in {target}."
+        };
+        var possibleMistake = narration.Contains("wrong", StringComparison.OrdinalIgnoreCase) ||
+                              narration.Contains("mistake", StringComparison.OrdinalIgnoreCase) ||
+                              narration.Contains("actually", StringComparison.OrdinalIgnoreCase) ||
+                              narration.Contains("instead", StringComparison.OrdinalIgnoreCase)
+            ? "Nearby narration may describe a correction; review whether this action belongs in the final procedure."
+            : null;
+        return new ActionUnderstanding(
+            action.Id,
+            action.Order,
+            action.IncludeInSkill,
+            string.IsNullOrWhiteSpace(narration) ? action.Detail ?? "Intent was not narrated." : narration,
+            instruction,
+            action.Before is null ? "No before frame was available." : "The before frame shows the state immediately before the interaction.",
+            action.After is null ? "No after frame was available." : "The after frame shows the settled state after the interaction.",
+            "Confirm the expected visible state before continuing.",
+            possibleMistake,
+            action.Confidence,
+            possibleMistake is null ? null : "The local fallback cannot determine whether the correction refers to this action or the next one.");
+    }
+}
+
+public static class ActionPrompt
+{
+    public static string Build(IReadOnlyList<ActionEvidence> actions, IReadOnlyList<FrameEvidence> frames, bool audioAttached)
+    {
+        var prompt = new StringBuilder();
+        prompt.AppendLine("Interpret each demonstrated computer action. Return only this JSON shape:");
+        prompt.AppendLine("{\"actions\":[{\"actionId\":\"GUID\",\"order\":1,\"includeInSkill\":true,\"userIntent\":\"why\",\"instruction\":\"semantic reusable instruction\",\"visibleBefore\":\"observable state\",\"observedChange\":\"visible transition\",\"expectedResult\":\"specific observable result\",\"possibleMistake\":null,\"confidence\":0.0,\"uncertainty\":null}]}");
+        prompt.AppendLine("Compare the before and after frame belonging to each action. Use nearby narration to explain intent, conditions, variable values, corrections, mistakes, and success criteria.");
+        prompt.AppendLine("Exclude a demonstrated mistake only when the evidence supports it. Never expose or reconstruct typed text from a protected field. Never invent a label or successful change that is not visible.");
+        prompt.AppendLine(audioAttached
+            ? "A synchronized narration window is attached; use it together with the timestamped nearby transcript."
+            : "No native audio is attached; use the timestamped nearby transcript.");
+        prompt.AppendLine();
+        foreach (var action in actions)
+        {
+            var target = action.Target?.IsPassword == true ? "[protected field]" : action.Target?.Name ?? action.Target?.ControlType ?? "unknown";
+            prompt.AppendLine($"Action {action.Order}: actionId={action.Id}; time={action.StartMilliseconds}-{action.EndMilliseconds}ms; kind={action.Kind}; detail={action.Detail}; app={action.Target?.ProcessName}; window={action.Target?.WindowTitle}; target={target}; before={action.Before?.Id ?? "missing"}; after={action.After?.Id ?? "missing"}; narration={string.Join(" | ", action.NearbyNarration.Select(segment => segment.Text))}");
+        }
+        prompt.AppendLine();
+        prompt.AppendLine("Attached frames, in order:");
+        foreach (var frame in frames)
+            prompt.AppendLine($"id={frame.Id}; actionId={frame.ActionId}; role={frame.Role}; time={frame.ElapsedMilliseconds}ms");
+        return prompt.ToString();
+    }
+}
+
+public static class CriticPrompt
+{
+    public static string Build(RecordingTrace trace, SkillDraft draft)
+    {
+        var evidence = string.Join('\n', trace.Interpretations.OrderBy(item => item.Order).Select(item =>
+            $"{item.Order}. include={item.IncludeInSkill}; intent={item.UserIntent}; instruction={item.Instruction}; change={item.ObservedChange}; expected={item.ExpectedResult}; mistake={item.PossibleMistake}; uncertainty={item.Uncertainty}"));
+        var transcript = string.Join('\n', trace.Transcript.Select(item => $"{item.StartMilliseconds}-{item.EndMilliseconds}ms: {item.Text}"));
+        return $"""
+Review the SkillDraft against the evidence, repair it, and return only the complete corrected SkillDraft JSON.
+Keep only supported steps, preserve corrections and uncertainty, turn run-specific values into inputs, and make verification observable.
+The description must clearly state both what the skill does and when an agent should use it.
+Never add secrets, hidden actions, coordinates, unobserved labels, or unsupported success claims.
+
+Current SkillDraft:
+{JsonSerializer.Serialize(draft, JsonDefaults.Options)}
+
+Ordered action interpretations:
+{evidence}
+
+Full narration:
+{transcript}
+""";
+    }
+}
+
+public static class SkillDraftValidator
+{
+    public static void Validate(SkillDraft draft)
+    {
+        if (string.IsNullOrWhiteSpace(draft.Name) || string.IsNullOrWhiteSpace(draft.Description))
+            throw new InvalidDataException("The skill needs a name and a description.");
+        if (string.IsNullOrWhiteSpace(draft.Intent) || string.IsNullOrWhiteSpace(draft.Goal))
+            throw new InvalidDataException("The skill needs intent and goal fields.");
+        if (draft.Procedure.Count == 0) throw new InvalidDataException("The skill procedure is empty.");
+        if (draft.Safety.Count == 0 || draft.Verification.Count == 0 || draft.Recovery.Count == 0)
+            throw new InvalidDataException("The skill needs safety, verification, and recovery guidance.");
+    }
+}
+
 public static class CompilerPrompt
 {
     public static string Build(RecordingTrace trace, IReadOnlyList<FrameEvidence>? frames = null, bool audioAttached = false)
@@ -301,13 +524,22 @@ public static class CompilerPrompt
             : string.Join('\n', trace.Transcript.Select(t => $"{t.StartMilliseconds}-{t.EndMilliseconds}ms (confidence {t.Confidence:0.00}): {t.Text}"));
         var notes = trace.Notes.Count == 0 ? "No recorder notes." : string.Join('\n', trace.Notes);
         var frameContext = frames is { Count: > 0 }
-            ? string.Join('\n', frames.Select((frame, index) => $"Attached frame {index + 1}: {frame.ElapsedMilliseconds}ms, reason={frame.Reason}. Use it to verify visible labels, state changes, and target identity; do not read secrets."))
+            ? string.Join('\n', frames.Select((frame, index) => $"Attached frame {index + 1}: id={frame.Id}, {frame.ElapsedMilliseconds}ms, role={frame.Role}, action={frame.ActionId}, reason={frame.Reason}. Use it to verify visible labels, state changes, and target identity; do not read secrets."))
             : "No frame attachments were available.";
+        var actions = trace.Actions.Count == 0
+            ? "No paired action evidence was available."
+            : string.Join('\n', trace.Actions.Where(a => !a.Redacted).OrderBy(a => a.Order).Select(a =>
+                 $"Action {a.Order} id={a.Id} {a.StartMilliseconds}-{a.EndMilliseconds}ms kind={a.Kind} detail={a.Detail}; before={a.Before?.Id ?? "none"}; after={a.After?.Id ?? "none"}; narration={string.Join(" | ", a.NearbyNarration.Select(n => n.Text))}; target={TargetContext(a.Target)}; include={a.IncludeInSkill}; confidence={a.Confidence:0.00}"));
+        var interpretations = trace.Interpretations.Count == 0
+            ? "No action interpretations were available."
+            : string.Join('\n', trace.Interpretations.OrderBy(item => item.Order).Select(item =>
+                $"Action {item.Order} id={item.ActionId}; include={item.IncludeInSkill}; userIntent={item.UserIntent}; instruction={item.Instruction}; visibleBefore={item.VisibleBefore}; observedChange={item.ObservedChange}; expectedResult={item.ExpectedResult}; possibleMistake={item.PossibleMistake}; confidence={item.Confidence:0.00}; uncertainty={item.Uncertainty}"));
         var audioContext = audioAttached ? "The recorded WAV narration is attached. Use it to resolve intent, values, corrections, conditions, and spoken success criteria; prefer explicit narration over guesses." : "No audio bytes are attached; use the transcript only if present.";
         var prompt = new StringBuilder();
         prompt.AppendLine("Create a reusable computer skill from the complete demonstration context below.");
         prompt.AppendLine("First infer the user's intent and desired outcome, then separate intent from the mechanical UI actions that implemented it.");
         prompt.AppendLine("Return only valid JSON matching SkillDraft with fields Name, Title, Description, Intent, Goal, Inputs (Name, Description, Type, Required, Secret), Preconditions, Procedure (Order, Instruction, Target, ExpectedResult, Confidence), DecisionRules, Safety, Verification, Recovery, Uncertainties.");
+        prompt.AppendLine("Description must say what the skill does and when an agent should use it, using likely user trigger language.");
         prompt.AppendLine();
         prompt.AppendLine("Evidence rules:");
         prompt.AppendLine("- Narration is the strongest evidence of user intent, variable values, corrections, exceptions, and success criteria.");
@@ -317,6 +549,8 @@ public static class CompilerPrompt
         prompt.AppendLine("- Convert demonstrations into semantic instructions that another agent can execute with its available tools; do not depend on screen coordinates when a semantic target is available.");
         prompt.AppendLine("- Mark inputs that vary between runs and mark secrets as Secret=true. Ask before external, destructive, publishing, purchasing, sending, or submitting actions.");
         prompt.AppendLine("- Include verification and recovery steps that are observable and specific.");
+        prompt.AppendLine("- Every paired action is evidence: explain the visible transition between its before and after frames when meaningful.");
+        prompt.AppendLine("- Treat nearby narration as the reason for an action, and spoken corrections as authority to exclude mistakes.");
         prompt.AppendLine();
         prompt.AppendLine("Session:");
         prompt.AppendLine($"Title: {trace.Title}");
@@ -330,6 +564,12 @@ public static class CompilerPrompt
         prompt.AppendLine();
         prompt.AppendLine("Interaction timeline:");
         prompt.AppendLine(events);
+        prompt.AppendLine();
+        prompt.AppendLine("Paired action evidence:");
+        prompt.AppendLine(actions);
+        prompt.AppendLine();
+        prompt.AppendLine("Action-level multimodal interpretations:");
+        prompt.AppendLine(interpretations);
         prompt.AppendLine();
         prompt.AppendLine("Recorder notes:");
         prompt.AppendLine(notes);
@@ -372,7 +612,7 @@ public static class DraftFactory
             draft.Goal = $"Complete the demonstrated workflow to achieve the outcome described in the user's narration: {intent}";
             draft.Uncertainties.Add("The deterministic draft preserves the transcript as intent evidence; review it for transcription errors before saving.");
         }
-        var meaningful = trace.Events.Where(e => e.Kind is TraceEventKind.Click or TraceEventKind.DoubleClick or TraceEventKind.RightClick or TraceEventKind.Scroll or TraceEventKind.Shortcut or TraceEventKind.Marker).ToList();
+        var meaningful = trace.Events.Where(e => e.Kind is TraceEventKind.Click or TraceEventKind.DoubleClick or TraceEventKind.RightClick or TraceEventKind.Drag or TraceEventKind.Scroll or TraceEventKind.Shortcut or TraceEventKind.TextEntry or TraceEventKind.Marker).ToList();
         if (meaningful.Count == 0) meaningful = trace.Events.Where(e => e.Kind == TraceEventKind.KeyFrame).ToList();
         var index = 1;
         foreach (var item in meaningful.Take(40))
@@ -382,6 +622,8 @@ public static class DraftFactory
             {
                 TraceEventKind.Scroll => "Scroll in the demonstrated application until the next required content is visible.",
                 TraceEventKind.Shortcut => $"Use the demonstrated keyboard shortcut ({item.Detail ?? "shortcut"}).",
+                TraceEventKind.TextEntry => item.Target?.IsPassword == true ? "Enter the required secret in the protected field without displaying or storing it." : "Enter the required runtime value in the demonstrated field.",
+                TraceEventKind.Drag => "Drag the demonstrated item to the target location.",
                 TraceEventKind.Marker => "Perform the meaningful step demonstrated at this point.",
                 _ => target is null ? $"Repeat the demonstrated {item.Kind.ToString().ToLowerInvariant()} in the active application." : $"{item.Kind switch { TraceEventKind.DoubleClick => "Double-click", TraceEventKind.RightClick => "Right-click", _ => "Click" }} the control named \"{target}\"."
             };

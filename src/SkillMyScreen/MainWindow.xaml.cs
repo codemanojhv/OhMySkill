@@ -1,12 +1,22 @@
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 
 namespace SkillMyScreen;
 
 public partial class MainWindow : Window
 {
+    private sealed class ActionPreview
+    {
+        public string Header { get; init; } = "";
+        public BitmapImage? BeforeImage { get; init; }
+        public BitmapImage? AfterImage { get; init; }
+        public string Narration { get; init; } = "No nearby narration.";
+        public string Interpretation { get; init; } = "Not interpreted.";
+    }
+
     private readonly DispatcherTimer _uiTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
     private readonly AiProviderService _provider = new();
     private readonly RawInputObserver _input = new();
@@ -101,6 +111,7 @@ public partial class MainWindow : Window
             _recordingStarted = DateTimeOffset.Now;
             _recentEvents.Clear();
             _uiTimer.Start();
+            AudioStatus.Text = _recording.Trace.HasAudio ? "Microphone: capturing narration" : "Microphone: unavailable (audio will be missing)";
             RecordingStatus.Text = _recording.Trace.HasAudio ? "Recording screen, microphone, and interaction context…" : "Recording screen and interaction context. No microphone was available.";
             SetPanel(RecordingPanel);
         }
@@ -122,6 +133,8 @@ public partial class MainWindow : Window
         if (_recording is null) return;
         var elapsed = DateTimeOffset.Now - _recordingStarted;
         RecordingTimer.Text = elapsed.ToString(@"mm\:ss");
+        if (_recording.Trace.HasAudio)
+            AudioStatus.Text = $"Microphone: capturing narration • level {_recording.MicrophoneLevel:P0}";
     }
 
     private void MarkStep_Click(object sender, RoutedEventArgs e) => _recording?.Mark();
@@ -140,15 +153,30 @@ public partial class MainWindow : Window
             ReviewStatus.Text = "Using narration, interaction context, and visual evidence to understand the user's intent…";
             SetPanel(ReviewPanel);
             var frames = completed.ReadFrameEvidence();
+            var audioWindows = completed.ReadAudioWindows();
+            var transcriptionSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (completed.AudioWav.Length > 0)
             {
                 try
                 {
-                    var transcript = await _provider.TranscribeAsync(completed.AudioWav, _settings);
-                    if (!string.IsNullOrWhiteSpace(transcript))
+                    ReviewStatus.Text = "Transcribing synchronized narration…";
+                    foreach (var window in audioWindows)
                     {
-                        trace.Transcript.Add(new TranscriptSegment(0, trace.Events.LastOrDefault()?.ElapsedMilliseconds ?? 0, transcript, _settings.UseAi ? 0.85 : 0.65));
-                        trace.Notes.Add("Narration was transcribed and included in intent analysis.");
+                        var transcript = await _provider.TranscribeAsync(window.Wav, _settings);
+                        transcriptionSources.Add(_provider.LastTranscriptionSource);
+                        if (!string.IsNullOrWhiteSpace(transcript))
+                        {
+                            var duration = Math.Max(1000, (window.Wav.Length - 44) / 32L);
+                            var segments = TranscriptSegmenter.Split(transcript, duration, _settings.UseAi ? 0.85 : 0.65)
+                                .Select(segment => segment with { StartMilliseconds = segment.StartMilliseconds + window.StartMilliseconds, EndMilliseconds = segment.EndMilliseconds + window.StartMilliseconds });
+                            trace.Transcript.AddRange(segments);
+                        }
+                    }
+                    completed.AttachTranscript(trace.Transcript);
+                    if (trace.Transcript.Count > 0)
+                    {
+                        trace.Evidence.AudioMode = string.Join(" + ", transcriptionSources.Where(source => source != "Unavailable"));
+                        trace.Notes.Add($"Narration was transcribed with {trace.Evidence.AudioMode} in timestamped windows and attached to nearby actions.");
                     }
                     else trace.Notes.Add("Narration was captured, but no transcript was available.");
                 }
@@ -157,17 +185,54 @@ public partial class MainWindow : Window
             _draft = DraftFactory.FromTrace(trace);
             try
             {
-                var aiDraft = await _provider.GenerateDraftAsync(trace, _settings, frames, completed.AudioWav);
+                var progress = new Progress<string>(message => ReviewStatus.Text = message);
+                var aiDraft = await _provider.GenerateDraftAsync(trace, _settings, frames, audioWindows, progress);
                 if (aiDraft is not null) _draft = aiDraft;
-                ReviewStatus.Text = $"Used {trace.Events.Count} timeline events, {frames.Count} visual frames, and {(trace.Transcript.Count > 0 ? "narration" : "no transcript")}. Review every step before saving.";
+                ReviewStatus.Text = $"Used {trace.Actions.Count} paired actions, {frames.Count} visual frames, and {(trace.Transcript.Count > 0 ? "timestamped narration" : "no transcript")}. Review every step before saving.";
             }
             catch (Exception ex)
             {
                 ReviewStatus.Text = "AI draft unavailable; a deterministic local draft is ready. " + ex.Message;
             }
+            EvidenceList.ItemsSource = completed.ReadActionEvidence().Select(action =>
+                BuildActionPreview(action, trace.Interpretations.FirstOrDefault(item => item.ActionId == action.Id))).ToArray();
+            EvidenceSummary.Text = BuildEvidenceSummary(trace, frames);
             LoadDraftIntoReview(_draft);
         }
         catch (Exception ex) { MessageBox.Show(this, ex.Message, "Could not finish recording", MessageBoxButton.OK, MessageBoxImage.Error); }
+    }
+
+    private static string BuildEvidenceSummary(RecordingTrace trace, IReadOnlyList<FrameEvidence> frames)
+    {
+        var pairCount = trace.Actions.Count(a => a.Before is not null && a.After is not null && !a.Redacted);
+        var words = trace.Transcript.Sum(t => t.Text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length);
+        var audio = trace.Transcript.Count > 0 ? trace.Evidence.AudioMode : trace.HasAudio ? "captured but unavailable to transcribe" : "unavailable";
+        var warnings = trace.Evidence.Warnings.Count == 0 ? "No evidence downgrade reported." : "Warnings: " + string.Join(" | ", trace.Evidence.Warnings);
+        return $"Evidence captured: {trace.Actions.Count} actions • {pairCount} before/after pairs • {frames.Count} frames • {words} narrated words • {trace.Interpretations.Count} action interpretations\nAudio: {audio} • Vision: {trace.Evidence.VisionMode} • Provider: {trace.Evidence.Provider}\n{warnings}";
+    }
+
+    private static ActionPreview BuildActionPreview(ActionEvidence action, ActionUnderstanding? understanding)
+    {
+        var narration = action.NearbyNarration.Count == 0 ? "No nearby narration." : string.Join(" ", action.NearbyNarration.Select(n => n.Text));
+        return new ActionPreview
+        {
+            Header = $"{action.Order}. {action.Kind} • {action.StartMilliseconds}–{action.EndMilliseconds} ms • confidence {action.Confidence:0.00}",
+            BeforeImage = ToBitmap(action.Before?.Png),
+            AfterImage = ToBitmap(action.After?.Png),
+            Narration = narration,
+            Interpretation = understanding is null
+                ? "Local evidence only; edit the draft if this action was misunderstood."
+                : $"{(understanding.IncludeInSkill ? "Include" : "Exclude")} — {understanding.Instruction} Expected: {understanding.ExpectedResult} Confidence {understanding.Confidence:0.00}"
+        };
+    }
+
+    private static BitmapImage? ToBitmap(byte[]? bytes)
+    {
+        if (bytes is not { Length: > 0 }) return null;
+        using var stream = new MemoryStream(bytes);
+        var image = new BitmapImage();
+        image.BeginInit(); image.CacheOption = BitmapCacheOption.OnLoad; image.StreamSource = stream; image.EndInit(); image.Freeze();
+        return image;
     }
 
     private void LoadDraftIntoReview(SkillDraft draft)
@@ -210,13 +275,15 @@ public partial class MainWindow : Window
         {
             _draft = ReadDraftFromReview();
             _savedPath = SkillStorage.Save(_draft, AppPaths.Skills);
+            var promptPath = Path.Combine(Path.GetDirectoryName(_savedPath)!, "USE_THIS_SKILL.txt");
+            File.WriteAllText(promptPath, PromptBuilder.Build(_draft, _savedPath), new System.Text.UTF8Encoding(false));
             _completedRecording?.DeleteTemporarySession();
             _completedRecording?.Dispose();
             _completedRecording = null;
             MarkdownPreviewBox.Text = SkillRenderer.Render(_draft);
-            ReviewStatus.Text = $"Saved {_savedPath}. Temporary encrypted recording data can now be deleted.";
+            ReviewStatus.Text = $"Saved {_savedPath}. Temporary encrypted recording evidence was deleted.";
             Clipboard.SetText(PromptBuilder.Build(_draft, _savedPath));
-            MessageBox.Show(this, $"Saved SKILL.md:\n{_savedPath}\n\nThe agent prompt has been copied to the clipboard.", "Skill created", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(this, $"Saved SKILL.md:\n{_savedPath}\n\nSaved prompt:\n{promptPath}\n\nThe agent prompt has also been copied to the clipboard.", "Skill created", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex) { MessageBox.Show(this, ex.Message, "Could not save skill", MessageBoxButton.OK, MessageBoxImage.Error); }
     }

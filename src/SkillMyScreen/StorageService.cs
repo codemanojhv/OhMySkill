@@ -95,6 +95,18 @@ public sealed class SecureSessionStore
         EncryptedFile.Write(Path.Combine(Folder, "audio.wav.enc"), wav, _key);
     }
 
+    public string WriteAudioChunk(string name, byte[] wav)
+    {
+        var relative = Path.Combine("audio", name + ".wav.enc");
+        EncryptedFile.Write(Path.Combine(Folder, relative), wav, _key);
+        return relative.Replace('\\', '/');
+    }
+
+    public byte[] ReadAudioChunk(string relativePath)
+    {
+        return EncryptedFile.Read(Path.Combine(Folder, relativePath.Replace('/', Path.DirectorySeparatorChar)), _key);
+    }
+
     public void WriteFrame(string name, byte[] png)
     {
         EncryptedFile.Write(Path.Combine(Folder, "frames", name + ".enc"), png, _key);
@@ -211,6 +223,7 @@ public static class SkillStorage
 {
     public static string Save(SkillDraft draft, string root)
     {
+        SkillDraftValidator.Validate(draft);
         Directory.CreateDirectory(root);
         var slug = SkillName.Slugify(draft.Name);
         var folder = Path.Combine(root, slug);

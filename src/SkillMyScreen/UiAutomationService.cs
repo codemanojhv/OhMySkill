@@ -19,39 +19,49 @@ public static class UiAutomationService
         try
         {
             if (!GetCursorPos(out var cursor)) return null;
-            var element = AutomationElement.FromPoint(new Point(cursor.X, cursor.Y));
-            if (element is null) return null;
-            var current = element.Current;
-            var window = GetForegroundWindow();
-            GetWindowThreadProcessId(window, out var pid);
-            var processName = "unknown";
-            try { processName = Process.GetProcessById((int)pid).ProcessName; } catch { }
-            var title = new StringBuilder(512);
-            GetWindowText(window, title, title.Capacity);
-            var ancestors = new List<string>();
-            var node = TreeWalker.RawViewWalker.GetParent(element);
-            for (var i = 0; i < 4 && node is not null; i++)
-            {
-                if (!string.IsNullOrWhiteSpace(node.Current.Name)) ancestors.Add(node.Current.Name);
-                node = TreeWalker.RawViewWalker.GetParent(node);
-            }
-            var bounds = current.BoundingRectangle;
-            return new UiTarget(
-                processName,
-                title.ToString(),
-                current.Name,
-                current.AutomationId,
-                current.ControlType?.ProgrammaticName,
-                current.ClassName,
-                current.HelpText,
-                ancestors,
-                bounds.X,
-                bounds.Y,
-                bounds.Width,
-                bounds.Height,
-                current.IsPassword,
-                current.IsEnabled);
+            return FromElement(AutomationElement.FromPoint(new Point(cursor.X, cursor.Y)));
         }
         catch { return null; }
+    }
+
+    public static UiTarget? Focused()
+    {
+        try { return FromElement(AutomationElement.FocusedElement); }
+        catch { return null; }
+    }
+
+    private static UiTarget? FromElement(AutomationElement? element)
+    {
+        if (element is null) return null;
+        var current = element.Current;
+        var window = GetForegroundWindow();
+        GetWindowThreadProcessId(window, out var pid);
+        var processName = "unknown";
+        try { processName = Process.GetProcessById((int)pid).ProcessName; } catch { }
+        var title = new StringBuilder(512);
+        GetWindowText(window, title, title.Capacity);
+        var ancestors = new List<string>();
+        var node = TreeWalker.RawViewWalker.GetParent(element);
+        for (var i = 0; i < 4 && node is not null; i++)
+        {
+            if (!string.IsNullOrWhiteSpace(node.Current.Name)) ancestors.Add(node.Current.Name);
+            node = TreeWalker.RawViewWalker.GetParent(node);
+        }
+        var bounds = current.BoundingRectangle;
+        return new UiTarget(
+            processName,
+            title.ToString(),
+            current.Name,
+            current.AutomationId,
+            current.ControlType?.ProgrammaticName,
+            current.ClassName,
+            current.HelpText,
+            ancestors,
+            bounds.X,
+            bounds.Y,
+            bounds.Width,
+            bounds.Height,
+            current.IsPassword,
+            current.IsEnabled);
     }
 }
