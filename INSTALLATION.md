@@ -30,7 +30,9 @@ Recording uses the selected display/window, Windows UI Automation, and the defau
 
 ## SmartScreen and signing
 
-Unsigned development artifacts may show a Windows SmartScreen reputation warning. This does not mean the app requests administrator privileges. A production release must be Authenticode-signed and verified before distribution; the local build artifacts are unsigned until a code-signing certificate is configured.
+Unsigned development artifacts may show a Windows SmartScreen reputation warning. This does not mean the app requests administrator privileges. Production releases are built by the fail-closed workflow in [`SIGNING.md`](SIGNING.md), which requires a valid Authenticode signature and RFC 3161 timestamp before it can publish either EXE.
+
+Signing removes the **Unknown publisher** state. Microsoft may still classify a new signed publisher or new binary as unrecognized until reputation accumulates. Microsoft Store distribution is the only path Microsoft identifies as consistently avoiding first-download SmartScreen warnings.
 
 ## Build from source
 

@@ -8,7 +8,7 @@ It is designed for work that happens anywhere on a Windows computer—not only i
 
 The v0.2 workflow targets the user-visible “Record a Skill” pattern: record a demonstration with narration, interpret each action, synthesize the full trajectory, review the result, and save a portable skill. It does not claim to reproduce another product’s unpublished internal implementation.
 
-> **Status:** the v0.2 local implementation is complete. It uses synchronized action-level audio/visual interpretation, full-trajectory context, synthesis, and an evidence critic. Release signing and live provider/model validation remain distribution gates.
+> **Status:** the v0.2 local implementation is complete. It uses synchronized action-level audio/visual interpretation, full-trajectory context, synthesis, and an evidence critic. The repository includes a fail-closed Microsoft Artifact Signing release workflow; its Azure public-trust identity must be provisioned before the first signed release.
 
 ## Product boundary
 
@@ -155,7 +155,7 @@ Supported targets:
 - ARM64 Windows: use <code>win-arm64</code>.
 - A microphone is optional; screen and interaction recording continue when no microphone is available.
 
-The published binaries are currently unsigned. SmartScreen or enterprise policy may therefore show a reputation warning even though the executable is self-contained and does not request administrator access. Code signing is a distribution hardening task, not a runtime dependency.
+Local developer builds are unsigned. Public releases must be produced by the fail-closed Microsoft Artifact Signing workflow documented in [`SIGNING.md`](SIGNING.md); it signs and timestamps both architectures and rejects invalid output before publishing.
 
 ## Getting started
 
@@ -309,7 +309,7 @@ This is local evidence, not a claim that every provider, Windows edition, microp
 - Generic OpenAI-compatible endpoints differ in image, audio, and JSON support. A rejected rich-media request is visibly downgraded to transcript/UI metadata, and each provider/model still needs a live test.
 - Generated skills require human review. A recording is evidence, not proof that every inferred instruction is correct.
 - The application creates instructions only; it does not execute or verify the workflow on the user's behalf.
-- v0.2 release artifacts must be signed before they are called production-ready; unsigned builds are beta artifacts.
+- The first signed release is blocked until the publisher completes Microsoft Artifact Signing Public Trust identity validation and configures GitHub OIDC.
 
 ## Roadmap
 

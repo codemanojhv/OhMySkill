@@ -1,0 +1,134 @@
+name: Signed Windows release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release tag, for example v0.2.0
+        required: true
+        type: string
+      prerelease:
+        description: Publish as a prerelease
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: signed-windows-release
+  cancel-in-progress: false
+
+jobs:
+  build-sign-release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-2025
+    steps:
+      - name: Validate release input
+        shell: pwsh
+        run: |
+          $version = '${{ inputs.version }}'
+          if ($version -notmatch '^v\d+\.\d+\.\d+([.-][0-9A-Za-z.-]+)?$') {
+            throw "Version must be a semantic tag such as v0.2.0."
+          }
+          "RELEASE_VERSION=$($version.Substring(1))" >> $env:GITHUB_ENV
+
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore and validate
+        shell: pwsh
+        run: |
+          dotnet restore .\SkillMyScreen.sln
+          dotnet build .\SkillMyScreen.sln -c Release --no-restore
+          dotnet run --project .\tests\SkillMyScreen.SelfCheck\SkillMyScreen.SelfCheck.csproj -c Release --no-build
+
+      - name: Publish x64 and ARM64
+        shell: pwsh
+        run: |
+          dotnet publish .\src\SkillMyScreen\SkillMyScreen.csproj -c Release -r win-x64 --self-contained true -p:Version=$env:RELEASE_VERSION -p:PublishSingleFile=true -p:PublishTrimmed=false -o .\artifacts\win-x64
+          dotnet publish .\src\SkillMyScreen\SkillMyScreen.csproj -c Release -r win-arm64 --self-contained true -p:Version=$env:RELEASE_VERSION -p:PublishSingleFile=true -p:PublishTrimmed=false -o .\artifacts\win-arm64
+          New-Item -ItemType Directory -Path .\artifacts\release -Force | Out-Null
+          Copy-Item .\artifacts\win-x64\SkillMyScreen.exe .\artifacts\release\SkillMyScreen-win-x64.exe
+          Copy-Item .\artifacts\win-arm64\SkillMyScreen.exe .\artifacts\release\SkillMyScreen-win-arm64.exe
+
+      - name: Authenticate to Azure with OIDC
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Authenticode sign and timestamp both EXEs
+        uses: azure/artifact-signing-action@v2
+        with:
+          endpoint: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.ARTIFACT_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.ARTIFACT_SIGNING_PROFILE }}
+          files-folder: ${{ github.workspace }}\artifacts\release
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          description: SkillMyScreen
+          description-url: https://github.com/codemanojhv/SkillMyScreen
+
+      - name: Reject unsigned, invalid, or untimestamped output
+        shell: pwsh
+        run: |
+          $expected = @{
+            'SkillMyScreen-win-x64.exe' = 0x8664
+            'SkillMyScreen-win-arm64.exe' = 0xAA64
+          }
+          foreach ($item in $expected.GetEnumerator()) {
+            $path = Join-Path .\artifacts\release $item.Key
+            $signature = Get-AuthenticodeSignature -LiteralPath $path
+            if ($signature.Status -ne 'Valid') {
+              throw "$($item.Key) signature status is $($signature.Status)."
+            }
+            if ($null -eq $signature.TimeStamperCertificate) {
+              throw "$($item.Key) has no trusted timestamp."
+            }
+            $bytes = [IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $path))
+            $peOffset = [BitConverter]::ToInt32($bytes, 0x3c)
+            $machine = [BitConverter]::ToUInt16($bytes, $peOffset + 4)
+            if ($machine -ne $item.Value) {
+              throw "$($item.Key) has PE machine 0x$($machine.ToString('X4')); expected 0x$($item.Value.ToString('X4'))."
+            }
+            Write-Host "$($item.Key): $($signature.SignerCertificate.Subject); timestamp $($signature.TimeStamperCertificate.NotBefore)"
+          }
+
+      - name: Generate checksums
+        shell: pwsh
+        run: |
+          $lines = Get-ChildItem .\artifacts\release\*.exe | Sort-Object Name | ForEach-Object {
+            $hash = Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256
+            "$($hash.Hash.ToLowerInvariant())  $($_.Name)"
+          }
+          Set-Content .\artifacts\release\SHA256SUMS.txt -Value $lines -Encoding ascii
+
+      - name: Upload verified signed artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: SkillMyScreen-${{ inputs.version }}-signed
+          path: artifacts/release/*
+          if-no-files-found: error
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ inputs.version }}
+          prerelease: ${{ inputs.prerelease }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            artifacts/release/SkillMyScreen-win-x64.exe
+            artifacts/release/SkillMyScreen-win-arm64.exe
+            artifacts/release/SHA256SUMS.txt
