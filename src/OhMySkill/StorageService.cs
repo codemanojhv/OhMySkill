@@ -5,14 +5,14 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Windows;
 
-namespace SkillMyScreen;
+namespace OhMySkill;
 
 public static class AppPaths
 {
-    public static string Root => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SkillMyScreen");
+    public static string Root => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Oh My Skill");
     public static string Sessions => Path.Combine(Root, "sessions");
     public static string Settings => Path.Combine(Root, "settings.json");
-    public static string Skills => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "SkillMyScreen", "skills");
+    public static string Skills => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Oh My Skill", "skills");
 }
 
 public static class JsonDefaults
@@ -95,9 +95,26 @@ public sealed class SecureSessionStore
         EncryptedFile.Write(Path.Combine(Folder, "audio.wav.enc"), wav, _key);
     }
 
+    public string WriteAudioChunk(string name, byte[] wav)
+    {
+        var relative = Path.Combine("audio", name + ".wav.enc");
+        EncryptedFile.Write(Path.Combine(Folder, relative), wav, _key);
+        return relative.Replace('\\', '/');
+    }
+
+    public byte[] ReadAudioChunk(string relativePath)
+    {
+        return EncryptedFile.Read(Path.Combine(Folder, relativePath.Replace('/', Path.DirectorySeparatorChar)), _key);
+    }
+
     public void WriteFrame(string name, byte[] png)
     {
         EncryptedFile.Write(Path.Combine(Folder, "frames", name + ".enc"), png, _key);
+    }
+
+    public byte[] ReadFrame(string name)
+    {
+        return EncryptedFile.Read(Path.Combine(Folder, "frames", name + ".enc"), _key);
     }
 
     public void DeleteAfterSave()
@@ -152,6 +169,7 @@ public static class SkillRenderer
         sb.AppendLine("---");
         sb.AppendLine();
         sb.AppendLine($"# {draft.Title.Trim()}");
+        Section(sb, "Intent", [draft.Intent]);
         Section(sb, "Goal", [draft.Goal]);
         Section(sb, "Required inputs", draft.Inputs.Count == 0 ? ["- No explicit runtime inputs were identified."] : draft.Inputs.Select(i => $"- `{i.Name}`: {i.Description}{(i.Secret ? " (secret; never print or store the value)" : "")}"));
         Section(sb, "Preconditions", draft.Preconditions);
@@ -205,6 +223,7 @@ public static class SkillStorage
 {
     public static string Save(SkillDraft draft, string root)
     {
+        SkillDraftValidator.Validate(draft);
         Directory.CreateDirectory(root);
         var slug = SkillName.Slugify(draft.Name);
         var folder = Path.Combine(root, slug);

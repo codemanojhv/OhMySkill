@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Interop;
 
-namespace SkillMyScreen;
+namespace OhMySkill;
 
 public sealed class RawInputObserver : IDisposable
 {
@@ -26,6 +26,11 @@ public sealed class RawInputObserver : IDisposable
     private RecordingController? _controller;
     private bool _leftDown;
     private bool _rightDown;
+    private int _dragDistance;
+    private long _lastClickTick;
+    private bool _controlDown;
+    private bool _altDown;
+    private bool _shiftDown;
 
     [StructLayout(LayoutKind.Sequential)] private struct RawInputDevice { public ushort UsagePage, Usage; public uint Flags; public IntPtr Target; }
     [StructLayout(LayoutKind.Sequential)] private struct RawInputHeader { public uint Type, Size; public IntPtr Device, Param; }
@@ -63,8 +68,22 @@ public sealed class RawInputObserver : IDisposable
             {
                 var mouse = Marshal.PtrToStructure<RawMouse>(payload);
                 var buttons = mouse.Buttons;
-                if ((buttons & RieMouseLeftDown) != 0 && !_leftDown) { _leftDown = true; _controller.RecordInput(TraceEventKind.Click, "left click", UiAutomationService.AtCursor()); }
-                if ((buttons & RieMouseLeftUp) != 0) _leftDown = false;
+                if (_leftDown) _dragDistance += Math.Abs(mouse.LastX) + Math.Abs(mouse.LastY);
+                if ((buttons & RieMouseLeftDown) != 0 && !_leftDown) { _leftDown = true; _dragDistance = 0; }
+                if ((buttons & RieMouseLeftUp) != 0 && _leftDown)
+                {
+                    _leftDown = false;
+                    var target = UiAutomationService.AtCursor();
+                    if (_dragDistance > 6)
+                        _controller.RecordInput(TraceEventKind.Drag, "dragged with left mouse button", target);
+                    else
+                    {
+                        var now = Environment.TickCount64;
+                        var kind = now - _lastClickTick <= 400 ? TraceEventKind.DoubleClick : TraceEventKind.Click;
+                        _lastClickTick = now;
+                        _controller.RecordInput(kind, kind == TraceEventKind.DoubleClick ? "double-click" : "left click", target);
+                    }
+                }
                 if ((buttons & RieMouseRightDown) != 0 && !_rightDown) { _rightDown = true; _controller.RecordInput(TraceEventKind.RightClick, "right click", UiAutomationService.AtCursor()); }
                 if ((buttons & RieMouseRightUp) != 0) _rightDown = false;
                 if ((buttons & RieMouseWheel) != 0) _controller.RecordInput(TraceEventKind.Scroll, "scroll", UiAutomationService.AtCursor());
@@ -72,14 +91,34 @@ public sealed class RawInputObserver : IDisposable
             else
             {
                 var keyboard = Marshal.PtrToStructure<RawKeyboard>(payload);
-                if ((keyboard.Flags & 1) != 0) return IntPtr.Zero;
-                if (keyboard.VKey is VkReturn or VkEscape or VkTab or VkControl or VkShift or VkAlt)
-                    _controller.RecordInput(TraceEventKind.Shortcut, $"key {keyboard.VKey}", UiAutomationService.AtCursor());
+                var released = (keyboard.Flags & 1) != 0;
+                if (keyboard.VKey == VkControl) { _controlDown = !released; return IntPtr.Zero; }
+                if (keyboard.VKey == VkAlt) { _altDown = !released; return IntPtr.Zero; }
+                if (keyboard.VKey == VkShift) { _shiftDown = !released; return IntPtr.Zero; }
+                if (released) return IntPtr.Zero;
+                var target = UiAutomationService.Focused();
+                if (keyboard.VKey is VkReturn or VkEscape or VkTab)
+                {
+                    var name = keyboard.VKey == VkReturn ? "Enter" : keyboard.VKey == VkEscape ? "Escape" : "Tab";
+                    _controller.RecordInput(TraceEventKind.Shortcut, name, target);
+                }
+                else if (_controlDown || _altDown)
+                {
+                    var modifiers = string.Join("+", new[] { _controlDown ? "Ctrl" : null, _altDown ? "Alt" : null, _shiftDown ? "Shift" : null }.Where(x => x is not null));
+                    _controller.RecordInput(TraceEventKind.Shortcut, $"{modifiers}+{KeyName(keyboard.VKey)}", target);
+                }
+                else
+                {
+                    _controller.RecordInput(TraceEventKind.TextEntry, target?.IsPassword == true ? "text entered in protected field" : "text-entry burst", target);
+                }
             }
         }
         finally { Marshal.FreeHGlobal(buffer); }
         return IntPtr.Zero;
     }
+
+    private static string KeyName(ushort value) =>
+        value is >= 0x30 and <= 0x5A ? ((char)value).ToString() : $"VK_{value:X2}";
 
     public void Dispose()
     {

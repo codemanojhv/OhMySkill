@@ -2,9 +2,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SkillMyScreen", "src\SkillMyScreen\SkillMyScreen.csproj", "{9D0B5E2F-FA52-4A0A-BD25-4C8D1DE3A99A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OhMySkill", "src\OhMySkill\OhMySkill.csproj", "{9D0B5E2F-FA52-4A0A-BD25-4C8D1DE3A99A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SkillMyScreen.SelfCheck", "tests\SkillMyScreen.SelfCheck\SkillMyScreen.SelfCheck.csproj", "{D7DD9280-1E05-4D68-9F3A-11B0DBE8E8F7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OhMySkill.SelfCheck", "tests\OhMySkill.SelfCheck\OhMySkill.SelfCheck.csproj", "{D7DD9280-1E05-4D68-9F3A-11B0DBE8E8F7}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

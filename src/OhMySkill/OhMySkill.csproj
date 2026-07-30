@@ -5,8 +5,12 @@
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyName>SkillMyScreen</AssemblyName>
-    <RootNamespace>SkillMyScreen</RootNamespace>
+    <AssemblyName>OhMySkill</AssemblyName>
+    <RootNamespace>OhMySkill</RootNamespace>
+    <Product>Oh My Skill</Product>
+    <Title>Oh My Skill</Title>
+    <Description>Turn narrated Windows demonstrations into portable AI skills.</Description>
+    <ApplicationIcon>Assets\Branding\OhMySkill.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <EnableDefaultApplicationDefinition>true</EnableDefaultApplicationDefinition>
     <EnableDefaultPageItems>true</EnableDefaultPageItems>
@@ -18,7 +22,9 @@
     <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>
   <ItemGroup>
+    <Resource Include="Assets\Branding\*.png" />
     <PackageReference Include="System.Drawing.Common" Version="10.0.0" />
+    <PackageReference Include="System.Speech" Version="10.0.0" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
   </ItemGroup>
 </Project>

@@ -7,6 +7,6 @@
     <SelfContained>false</SelfContained>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\SkillMyScreen\SkillMyScreen.csproj" />
+    <ProjectReference Include="..\..\src\OhMySkill\OhMySkill.csproj" />
   </ItemGroup>
 </Project>
