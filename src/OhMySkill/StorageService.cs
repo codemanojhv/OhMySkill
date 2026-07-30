@@ -5,14 +5,14 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Windows;
 
-namespace SkillMyScreen;
+namespace OhMySkill;
 
 public static class AppPaths
 {
-    public static string Root => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SkillMyScreen");
+    public static string Root => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Oh My Skill");
     public static string Sessions => Path.Combine(Root, "sessions");
     public static string Settings => Path.Combine(Root, "settings.json");
-    public static string Skills => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "SkillMyScreen", "skills");
+    public static string Skills => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Oh My Skill", "skills");
 }
 
 public static class JsonDefaults

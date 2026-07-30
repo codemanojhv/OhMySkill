@@ -1,6 +1,6 @@
 using System.Speech.Recognition;
 
-namespace SkillMyScreen;
+namespace OhMySkill;
 
 public static class LocalSpeechTranscriber
 {

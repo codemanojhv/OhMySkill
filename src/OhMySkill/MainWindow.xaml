@@ -1,15 +1,15 @@
-<Window x:Class="SkillMyScreen.MainWindow"
+<Window x:Class="OhMySkill.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="SkillMyScreen" Height="760" Width="1180" MinHeight="620" MinWidth="900"
-        Icon="/SkillMyScreen;component/Assets/Branding/p3.png"
+        Title="Oh My Skill" Height="760" Width="1180" MinHeight="620" MinWidth="900"
+        Icon="/OhMySkill;component/Assets/Branding/p3.png"
         Background="#0A101C" Foreground="#EAF1FF" WindowStartupLocation="CenterScreen">
   <Grid Margin="28">
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
     <DockPanel Grid.Row="0" Margin="0,0,0,24">
-      <Image Source="/SkillMyScreen;component/Assets/Branding/p3.png" Width="34" Height="34" Stretch="Uniform" Margin="0,0,12,0" AutomationProperties.Name="SkillMyScreen logo" />
+      <Image Source="/OhMySkill;component/Assets/Branding/p3.png" Width="34" Height="34" Stretch="Uniform" Margin="0,0,12,0" AutomationProperties.Name="Oh My Skill logo" />
       <StackPanel DockPanel.Dock="Left">
-        <TextBlock Text="SkillMyScreen" FontSize="28" FontWeight="SemiBold" />
+        <TextBlock Text="Oh My Skill" FontSize="28" FontWeight="SemiBold" />
         <TextBlock Text="Teach a computer workflow once. Save a portable SKILL.md." Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0" />
       </StackPanel>
       <TextBlock x:Name="StatusText" DockPanel.Dock="Right" Text="Local-first" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" />
@@ -32,9 +32,9 @@
       <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
         <Grid>
           <StackPanel x:Name="HomePanel">
-            <Image Source="/SkillMyScreen;component/Assets/Branding/p3.png" Width="112" Height="112" Stretch="Uniform" HorizontalAlignment="Left" AutomationProperties.Name="SkillMyScreen logo" Margin="0,0,0,18" />
+            <Image Source="/OhMySkill;component/Assets/Branding/p3.png" Width="112" Height="112" Stretch="Uniform" HorizontalAlignment="Left" AutomationProperties.Name="Oh My Skill logo" Margin="0,0,0,18" />
             <TextBlock Text="Build a reusable computer skill" FontSize="30" FontWeight="SemiBold" />
-            <TextBlock Text="Record a task in any Windows application while you explain what matters. SkillMyScreen turns the evidence into concise instructions for the agent you already use." Foreground="{StaticResource MutedBrush}" FontSize="15" TextWrapping="Wrap" Margin="0,10,0,22" />
+            <TextBlock Text="Record a task in any Windows application while you explain what matters. Oh My Skill turns the evidence into concise instructions for the agent you already use." Foreground="{StaticResource MutedBrush}" FontSize="15" TextWrapping="Wrap" Margin="0,10,0,22" />
             <Border Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="22">
               <StackPanel>
                 <TextBlock Text="Start with a visible, repeatable task" FontSize="19" FontWeight="SemiBold" />
@@ -64,7 +64,7 @@
           </StackPanel>
 
           <StackPanel x:Name="RecordingPanel" Visibility="Collapsed">
-            <Image Source="/SkillMyScreen;component/Assets/Branding/p3.png" Width="56" Height="56" Stretch="Uniform" HorizontalAlignment="Left" AutomationProperties.Name="SkillMyScreen logo" />
+            <Image Source="/OhMySkill;component/Assets/Branding/p3.png" Width="56" Height="56" Stretch="Uniform" HorizontalAlignment="Left" AutomationProperties.Name="Oh My Skill logo" />
             <TextBlock Text="Recording" FontSize="28" FontWeight="SemiBold" />
             <TextBlock x:Name="RecordingTimer" Text="00:00" FontSize="44" FontWeight="SemiBold" Margin="0,14,0,8" />
             <TextBlock x:Name="AudioStatus" Text="Microphone: checking" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,4" />
@@ -81,7 +81,7 @@
           </StackPanel>
 
           <StackPanel x:Name="ReviewPanel" Visibility="Collapsed">
-            <Image Source="/SkillMyScreen;component/Assets/Branding/p3.png" Width="56" Height="56" Stretch="Uniform" HorizontalAlignment="Left" AutomationProperties.Name="SkillMyScreen logo" />
+            <Image Source="/OhMySkill;component/Assets/Branding/p3.png" Width="56" Height="56" Stretch="Uniform" HorizontalAlignment="Left" AutomationProperties.Name="Oh My Skill logo" />
             <TextBlock Text="Review the generated skill" FontSize="28" FontWeight="SemiBold" />
             <TextBlock x:Name="ReviewStatus" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,8,0,14" />
             <Border Background="#111C2D" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,0,14">

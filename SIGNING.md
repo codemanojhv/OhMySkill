@@ -1,6 +1,6 @@
 # Trusted Windows signing
 
-SkillMyScreen releases are built on GitHub and signed through Microsoft Artifact Signing. The workflow refuses to create a release unless both EXEs have a valid Authenticode signature, an RFC 3161 timestamp, and the correct PE architecture.
+Oh My Skill releases are built on GitHub and signed through Microsoft Artifact Signing. The workflow refuses to create a release unless both EXEs have a valid Authenticode signature, an RFC 3161 timestamp, and the correct PE architecture.
 
 ## One-time Microsoft setup
 
@@ -12,7 +12,7 @@ SkillMyScreen releases are built on GitHub and signed through Microsoft Artifact
 6. Add a federated credential for this repository and the `main` branch:
 
    ```text
-   repo:codemanojhv/SkillMyScreen:ref:refs/heads/main
+   repo:codemanojhv/OhMySkill:ref:refs/heads/main
    ```
 
 No certificate private key is placed in GitHub. GitHub uses a short-lived OIDC token to authenticate to Azure for each release.
@@ -47,7 +47,7 @@ The workflow builds and tests the application, publishes x64 and ARM64 binaries,
 Run:
 
 ```powershell
-$signature = Get-AuthenticodeSignature .\SkillMyScreen-win-x64.exe
+$signature = Get-AuthenticodeSignature .\OhMySkill-win-x64.exe
 $signature | Format-List Status,StatusMessage
 $signature.SignerCertificate | Format-List Subject,Issuer,NotBefore,NotAfter,Thumbprint
 $signature.TimeStamperCertificate | Format-List Subject,NotBefore,NotAfter

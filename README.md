@@ -1,8 +1,8 @@
-# SkillMyScreen
+# Oh My Skill
 
-The v0.2 desktop shell uses the supplied cyan SkillMyScreen mark for dark and light surfaces, with monochrome variants for high-contrast contexts. Branding assets live under `src/SkillMyScreen/Assets/Branding`.
+The v0.2 desktop shell uses the supplied cyan Oh My Skill mark for dark and light surfaces, with monochrome variants for high-contrast contexts. Branding assets live under `src/OhMySkill/Assets/Branding`.
 
-SkillMyScreen is a local-first Windows desktop application that turns a demonstrated computer workflow into a reviewed, portable <code>SKILL.md</code> file for an AI agent.
+Oh My Skill is a local-first Windows desktop application that turns a demonstrated computer workflow into a reviewed, portable <code>SKILL.md</code> file for an AI agent.
 
 It is designed for work that happens anywhere on a Windows computer—not only in a browser. Demonstrate a task in a desktop application, file manager, terminal, browser, or mixed workflow; explain the intent through the microphone; review the generated instructions; then save the skill locally and paste the included agent prompt into Codex, OpenCode, Claude Code, Hermes, or another agent that can use the required computer tools.
 
@@ -12,7 +12,7 @@ The v0.2 workflow targets the user-visible “Record a Skill” pattern: record 
 
 ## Product boundary
 
-SkillMyScreen deliberately stops at the portable skill document.
+Oh My Skill deliberately stops at the portable skill document.
 
 - It records evidence from a user demonstration.
 - It creates a deterministic local draft or an optional BYOK AI draft.
@@ -40,7 +40,7 @@ flowchart TB
     PROTECT --> BYOK["Optional BYOK provider"]
     BYOK --> DRAFT
     DRAFT --> REVIEW["User reviews and edits the draft"]
-    REVIEW --> SKILL["Documents/SkillMyScreen/skills/<slug>/SKILL.md"]
+    REVIEW --> SKILL["Documents/Oh My Skill/skills/<slug>/SKILL.md"]
     REVIEW --> PROMPT["Copyable prompt for the receiving agent"]
 ~~~
 
@@ -48,7 +48,7 @@ flowchart TB
 
 1. Choose **Entire display** or a visible window.
 2. Start recording and perform the task normally.
-3. SkillMyScreen samples a short rolling frame buffer, stores a perceptually settled before/after pair for each logical action, keeps bounded trajectory keyframes, records encrypted timestamped microphone chunks, and captures high-level interaction context.
+3. Oh My Skill samples a short rolling frame buffer, stores a perceptually settled before/after pair for each logical action, keeps bounded trajectory keyframes, records encrypted timestamped microphone chunks, and captures high-level interaction context.
 4. Use **Mark Step** when an action is especially meaningful.
 5. Use **Redact Last 15 Seconds** if the recent portion should not be retained.
 6. Finish the recording to build a draft.
@@ -66,7 +66,7 @@ With AI enabled, the app works in three bounded stages: up to six actions are in
 The review page exposes the skill name, description, goal, inputs, procedure, safety, verification, recovery, and a Markdown preview. Saving creates a new folder under:
 
 ~~~text
-%USERPROFILE%\Documents\SkillMyScreen\skills\<skill-slug>\SKILL.md
+%USERPROFILE%\Documents\Oh My Skill\skills\<skill-slug>\SKILL.md
 ~~~
 
 The prompt copied to the clipboard tells the receiving agent to read that exact file before acting, follow its safety and verification rules, ask about missing inputs, and report the final verification result.
@@ -109,14 +109,14 @@ The requested execution level is <code>asInvoker</code>; the application does no
 
 ## Privacy and data lifecycle
 
-SkillMyScreen is local-first, but screen and microphone capture are inherently sensitive. The user remains responsible for what appears during a demonstration.
+Oh My Skill is local-first, but screen and microphone capture are inherently sensitive. The user remains responsible for what appears during a demonstration.
 
 ### Temporary session data
 
 While recording, encrypted temporary data is written under:
 
 ~~~text
-%LOCALAPPDATA%\SkillMyScreen\sessions\<recording-id>\
+%LOCALAPPDATA%\Oh My Skill\sessions\<recording-id>\
   key.dpapi
   trace.json.enc
   audio.wav.enc              (when a microphone is available)
@@ -132,7 +132,7 @@ Redacting the recent recording window removes its events, action frames, traject
 Provider settings are stored at:
 
 ~~~text
-%LOCALAPPDATA%\SkillMyScreen\settings.json
+%LOCALAPPDATA%\Oh My Skill\settings.json
 ~~~
 
 The API key is stored as DPAPI-protected ciphertext, not as clear text. Keys are never written to the repository, logs, generated Markdown, or the clipboard prompt. Leaving the API key field blank keeps the existing protected value.
@@ -164,7 +164,7 @@ Local developer builds are unsigned. Public releases must be produced by the fai
 Download the architecture-appropriate executable from the repository Releases page and run it. For most PCs, choose the x64 asset:
 
 ~~~text
-SkillMyScreen-win-x64.exe
+OhMySkill-win-x64.exe
 ~~~
 
 The app does not need the .NET runtime when using a self-contained release asset.
@@ -181,34 +181,34 @@ From the repository root:
 
 ~~~powershell
 dotnet --version
-dotnet restore .\SkillMyScreen.sln
-dotnet build .\SkillMyScreen.sln -c Release
-dotnet run --project .\tests\SkillMyScreen.SelfCheck\SkillMyScreen.SelfCheck.csproj -c Release
+dotnet restore .\OhMySkill.sln
+dotnet build .\OhMySkill.sln -c Release
+dotnet run --project .\tests\OhMySkill.SelfCheck\OhMySkill.SelfCheck.csproj -c Release
 ~~~
 
 The self-check should print:
 
 ~~~text
-SkillMyScreen self-check passed.
+Oh My Skill self-check passed.
 ~~~
 
 The development build can also run its diagnostic path directly:
 
 ~~~powershell
-dotnet run --project .\src\SkillMyScreen\SkillMyScreen.csproj -c Release -- --self-check
+dotnet run --project .\src\OhMySkill\OhMySkill.csproj -c Release -- --self-check
 ~~~
 
 ### Publish a self-contained EXE
 
 ~~~powershell
-dotnet publish .\src\SkillMyScreen\SkillMyScreen.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -o .\artifacts\win-x64
-dotnet publish .\src\SkillMyScreen\SkillMyScreen.csproj -c Release -r win-arm64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -o .\artifacts\win-arm64
+dotnet publish .\src\OhMySkill\OhMySkill.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -o .\artifacts\win-x64
+dotnet publish .\src\OhMySkill\OhMySkill.csproj -c Release -r win-arm64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -o .\artifacts\win-arm64
 ~~~
 
 Run the packaged diagnostic:
 
 ~~~powershell
-.\artifacts\win-x64\SkillMyScreen.exe --self-check
+.\artifacts\win-x64\OhMySkill.exe --self-check
 ~~~
 
 Build outputs and local SDK/cache folders are ignored by Git. Release assets should be attached to a GitHub Release rather than committed to the source tree.
@@ -216,11 +216,11 @@ Build outputs and local SDK/cache folders are ignored by Git. Release assets sho
 ## Project layout
 
 ~~~text
-SkillMyScreen/
+OhMySkill/
 ├── README.md                         Product, architecture, build, and privacy documentation
 ├── ARCHITECTURE.md                   Short architecture overview and Mermaid flow
-├── SkillMyScreen.sln                 Solution containing the app and self-check project
-├── src/SkillMyScreen/
+├── OhMySkill.sln                 Solution containing the app and self-check project
+├── src/OhMySkill/
 │   ├── MainWindow.xaml(.cs)          WPF UI and recording/review workflow
 │   ├── CaptureService.cs             Window catalog, screen capture, microphone, recorder
 │   ├── RawInputService.cs            Mouse and shortcut event observation
@@ -230,7 +230,7 @@ SkillMyScreen/
 │   ├── Models.cs                     Trace, draft, provider, and output contracts
 │   ├── SelfCheck.cs                  In-process diagnostic checks
 │   └── app.manifest                  asInvoker and Windows compatibility declaration
-├── tests/SkillMyScreen.SelfCheck/     Minimal executable validation project
+├── tests/OhMySkill.SelfCheck/     Minimal executable validation project
 └── artifacts/                         Local publish output; ignored from source commits
 ~~~
 

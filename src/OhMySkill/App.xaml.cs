@@ -1,6 +1,6 @@
 using System.Windows;
 
-namespace SkillMyScreen;
+namespace OhMySkill;
 
 public partial class App : Application
 {

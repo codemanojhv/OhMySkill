@@ -4,7 +4,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Automation;
 
-namespace SkillMyScreen;
+namespace OhMySkill;
 
 public static class UiAutomationService
 {

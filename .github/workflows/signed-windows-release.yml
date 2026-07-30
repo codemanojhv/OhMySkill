@@ -46,18 +46,18 @@ jobs:
       - name: Restore and validate
         shell: pwsh
         run: |
-          dotnet restore .\SkillMyScreen.sln
-          dotnet build .\SkillMyScreen.sln -c Release --no-restore
-          dotnet run --project .\tests\SkillMyScreen.SelfCheck\SkillMyScreen.SelfCheck.csproj -c Release --no-build
+          dotnet restore .\OhMySkill.sln
+          dotnet build .\OhMySkill.sln -c Release --no-restore
+          dotnet run --project .\tests\OhMySkill.SelfCheck\OhMySkill.SelfCheck.csproj -c Release --no-build
 
       - name: Publish x64 and ARM64
         shell: pwsh
         run: |
-          dotnet publish .\src\SkillMyScreen\SkillMyScreen.csproj -c Release -r win-x64 --self-contained true -p:Version=$env:RELEASE_VERSION -p:PublishSingleFile=true -p:PublishTrimmed=false -o .\artifacts\win-x64
-          dotnet publish .\src\SkillMyScreen\SkillMyScreen.csproj -c Release -r win-arm64 --self-contained true -p:Version=$env:RELEASE_VERSION -p:PublishSingleFile=true -p:PublishTrimmed=false -o .\artifacts\win-arm64
+          dotnet publish .\src\OhMySkill\OhMySkill.csproj -c Release -r win-x64 --self-contained true -p:Version=$env:RELEASE_VERSION -p:PublishSingleFile=true -p:PublishTrimmed=false -o .\artifacts\win-x64
+          dotnet publish .\src\OhMySkill\OhMySkill.csproj -c Release -r win-arm64 --self-contained true -p:Version=$env:RELEASE_VERSION -p:PublishSingleFile=true -p:PublishTrimmed=false -o .\artifacts\win-arm64
           New-Item -ItemType Directory -Path .\artifacts\release -Force | Out-Null
-          Copy-Item .\artifacts\win-x64\SkillMyScreen.exe .\artifacts\release\SkillMyScreen-win-x64.exe
-          Copy-Item .\artifacts\win-arm64\SkillMyScreen.exe .\artifacts\release\SkillMyScreen-win-arm64.exe
+          Copy-Item .\artifacts\win-x64\OhMySkill.exe .\artifacts\release\OhMySkill-win-x64.exe
+          Copy-Item .\artifacts\win-arm64\OhMySkill.exe .\artifacts\release\OhMySkill-win-arm64.exe
 
       - name: Authenticate to Azure with OIDC
         uses: azure/login@v3
@@ -77,15 +77,15 @@ jobs:
           file-digest: SHA256
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
-          description: SkillMyScreen
-          description-url: https://github.com/codemanojhv/SkillMyScreen
+          description: Oh My Skill
+          description-url: https://github.com/codemanojhv/OhMySkill
 
       - name: Reject unsigned, invalid, or untimestamped output
         shell: pwsh
         run: |
           $expected = @{
-            'SkillMyScreen-win-x64.exe' = 0x8664
-            'SkillMyScreen-win-arm64.exe' = 0xAA64
+            'OhMySkill-win-x64.exe' = 0x8664
+            'OhMySkill-win-arm64.exe' = 0xAA64
           }
           foreach ($item in $expected.GetEnumerator()) {
             $path = Join-Path .\artifacts\release $item.Key
@@ -117,7 +117,7 @@ jobs:
       - name: Upload verified signed artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: SkillMyScreen-${{ inputs.version }}-signed
+          name: OhMySkill-${{ inputs.version }}-signed
           path: artifacts/release/*
           if-no-files-found: error
 
@@ -129,6 +129,6 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |
-            artifacts/release/SkillMyScreen-win-x64.exe
-            artifacts/release/SkillMyScreen-win-arm64.exe
+            artifacts/release/OhMySkill-win-x64.exe
+            artifacts/release/OhMySkill-win-arm64.exe
             artifacts/release/SHA256SUMS.txt

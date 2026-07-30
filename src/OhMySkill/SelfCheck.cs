@@ -2,7 +2,7 @@ using System.Text;
 using System.Drawing;
 using System.Drawing.Imaging;
 
-namespace SkillMyScreen;
+namespace OhMySkill;
 
 public static class SelfCheck
 {
@@ -41,8 +41,8 @@ public static class SelfCheck
             Assert(ScreenCapture.IsVisuallyStable(unchanged, unchanged), "visual settle detection");
             Assert(!ScreenCapture.IsVisuallyStable(unchanged, TestPng(Color.Black)), "visual change detection");
             Assert(LocalSpeechTranscriber.TryTranscribeAsync([]).GetAwaiter().GetResult() is null, "empty audio handling");
-            var prompt = PromptBuilder.Build(draft, @"E:\SkillMyScreen\Documents\SKILL.md");
-            Assert(prompt.Contains("/mnt/e/SkillMyScreen/Documents/SKILL.md", StringComparison.Ordinal), "WSL prompt path");
+            var prompt = PromptBuilder.Build(draft, @"E:\OhMySkill\Documents\SKILL.md");
+            Assert(prompt.Contains("/mnt/e/OhMySkill/Documents/SKILL.md", StringComparison.Ordinal), "WSL prompt path");
             var outputRoot = Path.Combine(AppContext.BaseDirectory, "self-check-skills");
             draft.Procedure.Add(new SkillStep(1, "Open the reviewed report.", "report", "The report is visible."));
             var saved = SkillStorage.Save(draft, outputRoot);
@@ -54,12 +54,12 @@ public static class SelfCheck
             EncryptedFile.Write(path, clear, key);
             Assert(clear.SequenceEqual(EncryptedFile.Read(path, key)), "AES-GCM roundtrip");
             Directory.Delete(Path.Combine(AppPaths.Root, "self-check"), true);
-            Console.Error.WriteLine("SkillMyScreen self-check passed.");
+            Console.Error.WriteLine("Oh My Skill self-check passed.");
             return true;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine("SkillMyScreen self-check failed: " + ex.Message);
+            Console.Error.WriteLine("Oh My Skill self-check failed: " + ex.Message);
             return false;
         }
     }

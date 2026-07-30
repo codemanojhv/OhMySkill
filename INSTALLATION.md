@@ -1,16 +1,16 @@
-# SkillMyScreen installation
+# Oh My Skill installation
 
 ## Download the portable EXE
 
 1. Open the repository Releases page.
 2. Download the file matching Windows architecture:
-   - `SkillMyScreen-win-x64.exe` for Intel/AMD 64-bit Windows.
-   - `SkillMyScreen-win-arm64.exe` for ARM64 Windows.
-3. Place the EXE in a folder you control, such as `E:\Apps\SkillMyScreen`.
+   - `OhMySkill-win-x64.exe` for Intel/AMD 64-bit Windows.
+   - `OhMySkill-win-arm64.exe` for ARM64 Windows.
+3. Place the EXE in a folder you control, such as `E:\Apps\Oh My Skill`.
 4. Verify the SHA-256 value against `SHA256SUMS.txt`.
 5. Run the EXE. No .NET runtime installation is required.
 
-The application stores settings under `%LOCALAPPDATA%\SkillMyScreen` and generated skills under `%USERPROFILE%\Documents\SkillMyScreen\skills`.
+The application stores settings under `%LOCALAPPDATA%\Oh My Skill` and generated skills under `%USERPROFILE%\Documents\Oh My Skill\skills`.
 
 ## Windows privacy access
 
@@ -39,10 +39,10 @@ Signing removes the **Unknown publisher** state. Microsoft may still classify a 
 The repository targets .NET 10 and Windows 10 build 19041 or later. From PowerShell:
 
 ```powershell
-dotnet build .\SkillMyScreen.sln -c Release
-dotnet run --project .\tests\SkillMyScreen.SelfCheck\SkillMyScreen.SelfCheck.csproj -c Release
-dotnet publish .\src\SkillMyScreen\SkillMyScreen.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -o .\artifacts\win-x64
-dotnet publish .\src\SkillMyScreen\SkillMyScreen.csproj -c Release -r win-arm64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -o .\artifacts\win-arm64
+dotnet build .\OhMySkill.sln -c Release
+dotnet run --project .\tests\OhMySkill.SelfCheck\OhMySkill.SelfCheck.csproj -c Release
+dotnet publish .\src\OhMySkill\OhMySkill.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -o .\artifacts\win-x64
+dotnet publish .\src\OhMySkill\OhMySkill.csproj -c Release -r win-arm64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -o .\artifacts\win-arm64
 ```
 
-The generated branding resources are embedded from `src/SkillMyScreen/Assets/Branding`.
+The generated branding resources are embedded from `src/OhMySkill/Assets/Branding`.

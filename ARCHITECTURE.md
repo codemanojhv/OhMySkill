@@ -1,6 +1,6 @@
-# SkillMyScreen v0.2 architecture
+# Oh My Skill v0.2 architecture
 
-SkillMyScreen records a narrated Windows workflow, pairs every logical interaction with before/after screen evidence, and stops after saving a reviewed local `SKILL.md` plus a universal agent prompt.
+Oh My Skill records a narrated Windows workflow, pairs every logical interaction with before/after screen evidence, and stops after saving a reviewed local `SKILL.md` plus a universal agent prompt.
 
 ```mermaid
 flowchart TD
@@ -45,4 +45,4 @@ flowchart TD
 
 ## Product boundary
 
-The durable product output is a local `SKILL.md` and a universal prompt. SkillMyScreen does not execute skills, host MCP, inject input, install a browser, create a database, run a background service, require administrator access, or collect telemetry.
+The durable product output is a local `SKILL.md` and a universal prompt. Oh My Skill does not execute skills, host MCP, inject input, install a browser, create a database, run a background service, require administrator access, or collect telemetry.

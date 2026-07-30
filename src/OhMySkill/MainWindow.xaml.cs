@@ -4,7 +4,7 @@ using System.Windows.Interop;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 
-namespace SkillMyScreen;
+namespace OhMySkill;
 
 public partial class MainWindow : Window
 {

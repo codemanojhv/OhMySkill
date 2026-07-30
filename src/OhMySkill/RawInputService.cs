@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Interop;
 
-namespace SkillMyScreen;
+namespace OhMySkill;
 
 public sealed class RawInputObserver : IDisposable
 {
