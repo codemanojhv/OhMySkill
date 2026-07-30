@@ -6,6 +6,8 @@ It is designed for work that happens anywhere on a Windows computer—not only i
 
 > **Status:** early pre-release build. The vertical slice is implemented and runnable, but provider compatibility, capture fidelity, packaging, signing, and broad hardware coverage still need production hardening.
 
+> **Installation:** See the [installation guide](INSTALLATION.md) for release downloads, architecture selection, checksum verification, first-run setup, troubleshooting, updates, removal, and source builds.
+
 ## Product boundary
 
 SkillMyScreen deliberately stops at the portable skill document.
