@@ -1,3 +1,11 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="src/OhMySkill/Assets/Branding/p3.png">
+    <source media="(prefers-color-scheme: light)" srcset="src/OhMySkill/Assets/Branding/p2.png">
+    <img src="src/OhMySkill/Assets/Branding/p2.png" width="144" alt="Oh My Skill logo">
+  </picture>
+</p>
+
 # Oh My Skill
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-cyan.svg)](LICENSE)
@@ -10,7 +18,10 @@ It is designed for work that happens anywhere on a Windows computer—not only i
 
 The v0.2 workflow targets the user-visible “Record a Skill” pattern: record a demonstration with narration, interpret each action, synthesize the full trajectory, review the result, and save a portable skill. It does not claim to reproduce another product’s unpublished internal implementation.
 
-> **Status:** the v0.2 local implementation is complete. It uses synchronized action-level audio/visual interpretation, full-trajectory context, synthesis, and an evidence critic. The repository includes a fail-closed Microsoft Artifact Signing release workflow; its Azure public-trust identity must be provisioned before the first signed release.
+> **Status:** v0.2.0 release candidate. It uses synchronized action-level audio/visual interpretation, full-trajectory context, synthesis, and an evidence critic. The repository includes a fail-closed Microsoft Artifact Signing release workflow; a trusted public signer must be provisioned before production downloads are published.
+
+See [RELEASE_NOTES.md](RELEASE_NOTES.md) for the v0.2.0 release scope and
+[BRANDING.md](BRANDING.md) for the original logo artwork and usage map.
 
 ## Product boundary
 
@@ -220,6 +231,9 @@ Build outputs and local SDK/cache folders are ignored by Git. Release assets sho
 ~~~text
 OhMySkill/
 ├── README.md                         Product, architecture, build, and privacy documentation
+├── BRANDING.md                       Logo asset map and rights statement
+├── CODE_SIGNING_POLICY.md            Release signing policy and roles
+├── RELEASE_NOTES.md                  v0.2.0 release scope and limitations
 ├── ARCHITECTURE.md                   Short architecture overview and Mermaid flow
 ├── OhMySkill.sln                 Solution containing the app and self-check project
 ├── src/OhMySkill/
@@ -311,7 +325,7 @@ This is local evidence, not a claim that every provider, Windows edition, microp
 - Generic OpenAI-compatible endpoints differ in image, audio, and JSON support. A rejected rich-media request is visibly downgraded to transcript/UI metadata, and each provider/model still needs a live test.
 - Generated skills require human review. A recording is evidence, not proof that every inferred instruction is correct.
 - The application creates instructions only; it does not execute or verify the workflow on the user's behalf.
-- The first signed release is blocked until the publisher completes Microsoft Artifact Signing Public Trust identity validation and configures GitHub OIDC.
+- The first production signed release is blocked until a trusted public signing provider is provisioned and configured.
 
 ## Roadmap
 
@@ -329,10 +343,16 @@ project is open source so users can inspect the capture boundary, privacy
 behavior, provider requests, and generated `SKILL.md` output before using it.
 The repository's local-first behavior is documented in [PRIVACY.md](PRIVACY.md).
 
-The project may apply for open-source code signing through the SignPath
-Foundation. Until an external signing program accepts the project, public
-releases continue to use the fail-closed Microsoft Artifact Signing workflow
-described in [SIGNING.md](SIGNING.md).
+The project is applying for open-source code signing through the SignPath
+Foundation. See the [code signing policy](CODE_SIGNING_POLICY.md). Until an
+external signing program accepts the project, production releases continue to
+use the fail-closed Microsoft Artifact Signing workflow described in
+[SIGNING.md](SIGNING.md).
+
+The Oh My Skill mark and supplied logo assets are original artwork created and
+owned by the project maintainer. Permission to redistribute them with this
+project is granted under the MIT License; modified distributions must not imply
+endorsement. See [BRANDING.md](BRANDING.md).
 
 ## Contributing
 
@@ -347,6 +367,12 @@ Before opening a change:
 ## Security and privacy reports
 
 Do not publish captured recordings, API keys, or sensitive traces in a public issue. For a suspected security problem, use a private GitHub security report or contact the repository owner through GitHub with the minimum reproducible details.
+
+## Code signing policy
+
+See [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md) for the current release
+signing controls, maintainership roles, privacy statement, and sponsored
+open-source signing status.
 
 ## License
 

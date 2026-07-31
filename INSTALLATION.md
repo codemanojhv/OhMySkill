@@ -1,5 +1,13 @@
 # Oh My Skill installation
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="src/OhMySkill/Assets/Branding/p3.png">
+    <source media="(prefers-color-scheme: light)" srcset="src/OhMySkill/Assets/Branding/p2.png">
+    <img src="src/OhMySkill/Assets/Branding/p2.png" width="96" alt="Oh My Skill logo">
+  </picture>
+</p>
+
 ## Download the portable EXE
 
 1. Open the repository Releases page.
@@ -11,6 +19,21 @@
 5. Run the EXE. No .NET runtime installation is required.
 
 The application stores settings under `%LOCALAPPDATA%\Oh My Skill` and generated skills under `%USERPROFILE%\Documents\Oh My Skill\skills`.
+
+## Remove the portable app
+
+Oh My Skill does not install a service, startup entry, or registry component.
+To remove the application, close it and delete the downloaded `OhMySkill.exe`.
+If you also want to remove local settings and saved skills, delete these
+folders separately:
+
+```text
+%LOCALAPPDATA%\Oh My Skill
+%USERPROFILE%\Documents\Oh My Skill
+```
+
+Delete the second folder only after exporting any `SKILL.md` files you want to
+keep.
 
 ## Windows privacy access
 
@@ -30,7 +53,7 @@ Recording uses the selected display/window, Windows UI Automation, and the defau
 
 ## SmartScreen and signing
 
-Unsigned development artifacts may show a Windows SmartScreen reputation warning. This does not mean the app requests administrator privileges. Production releases are built by the fail-closed workflow in [`SIGNING.md`](SIGNING.md), which requires a valid Authenticode signature and RFC 3161 timestamp before it can publish either EXE.
+Unsigned development artifacts may show a Windows SmartScreen reputation warning. This does not mean the app requests administrator privileges. Production releases are built by the fail-closed workflow in [`SIGNING.md`](SIGNING.md), which requires a valid Authenticode signature and RFC 3161 timestamp before it can publish either EXE. Review the [code signing policy](CODE_SIGNING_POLICY.md) before distributing a release candidate.
 
 Signing removes the **Unknown publisher** state. Microsoft may still classify a new signed publisher or new binary as unrecognized until reputation accumulates. Microsoft Store distribution is the only path Microsoft identifies as consistently avoiding first-download SmartScreen warnings.
 
