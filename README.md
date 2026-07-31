@@ -1,5 +1,7 @@
 # Oh My Skill
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-cyan.svg)](LICENSE)
+
 The v0.2 desktop shell uses the supplied cyan Oh My Skill mark for dark and light surfaces, with monochrome variants for high-contrast contexts. Branding assets live under `src/OhMySkill/Assets/Branding`.
 
 Oh My Skill is a local-first Windows desktop application that turns a demonstrated computer workflow into a reviewed, portable <code>SKILL.md</code> file for an AI agent.
@@ -320,6 +322,18 @@ The next improvements should follow the evidence boundary rather than add an age
 3. **Distribution:** signed x64/ARM64 portable packages, release automation, update guidance, and Windows compatibility testing.
 4. **Examples:** representative skills for file management, spreadsheet work, desktop forms, terminal workflows, and mixed browser/desktop tasks.
 
+## Open source
+
+Oh My Skill is released under the permissive [MIT License](LICENSE). The
+project is open source so users can inspect the capture boundary, privacy
+behavior, provider requests, and generated `SKILL.md` output before using it.
+The repository's local-first behavior is documented in [PRIVACY.md](PRIVACY.md).
+
+The project may apply for open-source code signing through the SignPath
+Foundation. Until an external signing program accepts the project, public
+releases continue to use the fail-closed Microsoft Artifact Signing workflow
+described in [SIGNING.md](SIGNING.md).
+
 ## Contributing
 
 Before opening a change:
@@ -336,4 +350,6 @@ Do not publish captured recordings, API keys, or sensitive traces in a public is
 
 ## License
 
-No open-source license has been selected yet. Until a license is added, the repository should be treated as all-rights-reserved source for evaluation and development.
+Oh My Skill is available under the [MIT License](LICENSE). Contributions are
+accepted under the same license unless a contributor and the project
+maintainers agree otherwise in writing.
