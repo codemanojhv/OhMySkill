@@ -1,30 +1,42 @@
 <Window x:Class="OhMySkill.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Oh My Skill" Height="760" Width="1180" MinHeight="620" MinWidth="900"
+        Title="Oh My Skill" Height="800" Width="1220" MinHeight="640" MinWidth="940"
         Icon="/OhMySkill;component/Assets/Branding/OhMySkill.ico"
         Background="#0A101C" Foreground="#EAF1FF" WindowStartupLocation="CenterScreen">
   <Grid Margin="28">
-    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+
     <DockPanel Grid.Row="0" Margin="0,0,0,24">
       <Image Source="/OhMySkill;component/Assets/Branding/p3.png" Width="34" Height="34" Stretch="Uniform" Margin="0,0,12,0" AutomationProperties.Name="Oh My Skill logo" />
       <StackPanel DockPanel.Dock="Left">
         <TextBlock Text="Oh My Skill" FontSize="28" FontWeight="SemiBold" />
         <TextBlock Text="Teach a computer workflow once. Save a portable SKILL.md." Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0" />
       </StackPanel>
-      <TextBlock x:Name="StatusText" DockPanel.Dock="Right" Text="Local-first" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" />
+      <Border DockPanel.Dock="Right" Background="#111C2D" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="10,5" VerticalAlignment="Center">
+        <StackPanel Orientation="Horizontal">
+          <Ellipse x:Name="StatusDot" Width="8" Height="8" Fill="{StaticResource SuccessBrush}" VerticalAlignment="Center" Margin="0,0,7,0" />
+          <TextBlock x:Name="StatusText" Text="Ready" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" />
+        </StackPanel>
+      </Border>
     </DockPanel>
 
     <Grid Grid.Row="1">
-      <Grid.ColumnDefinitions><ColumnDefinition Width="220"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="220" />
+        <ColumnDefinition Width="*" />
+      </Grid.ColumnDefinitions>
       <StackPanel Grid.Column="0" Margin="0,0,26,0">
         <Button Content="Build a Skill" Click="BuildSkill_Click" />
         <Button Content="Saved Skills" Click="SavedSkills_Click" />
         <Button Content="AI Settings" Click="Settings_Click" />
         <Border Background="#111C2D" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,22,0,0">
           <StackPanel>
-            <TextBlock Text="What is saved?" FontWeight="SemiBold" />
-            <TextBlock Text="Only the final SKILL.md is kept by default. Audio, frames, and event traces are encrypted temporarily and deleted after saving." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0" />
+            <TextBlock Text="Privacy by default" FontWeight="SemiBold" />
+            <TextBlock Text="Only the final SKILL.md and prompt remain after a successful save. Temporary audio, frames, and traces are deleted." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0" />
           </StackPanel>
         </Border>
       </StackPanel>
@@ -32,9 +44,9 @@
       <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
         <Grid>
           <StackPanel x:Name="HomePanel">
-            <Image Source="/OhMySkill;component/Assets/Branding/p3.png" Width="112" Height="112" Stretch="Uniform" HorizontalAlignment="Left" AutomationProperties.Name="Oh My Skill logo" Margin="0,0,0,18" />
+            <Image Source="/OhMySkill;component/Assets/Branding/p3.png" Width="116" Height="116" Stretch="Uniform" HorizontalAlignment="Left" AutomationProperties.Name="Oh My Skill logo" Margin="0,0,0,18" />
             <TextBlock Text="Build a reusable computer skill" FontSize="30" FontWeight="SemiBold" />
-            <TextBlock Text="Record a task in any Windows application while you explain what matters. Oh My Skill turns the evidence into concise instructions for the agent you already use." Foreground="{StaticResource MutedBrush}" FontSize="15" TextWrapping="Wrap" Margin="0,10,0,22" />
+            <TextBlock Text="Record a task in any Windows application while you explain what matters. Oh My Skill uses your narration, before/after screen evidence, and high-level interaction context to draft instructions for the agent you already use." Foreground="{StaticResource MutedBrush}" FontSize="15" TextWrapping="Wrap" Margin="0,10,0,22" />
             <Border Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="22">
               <StackPanel>
                 <TextBlock Text="Start with a visible, repeatable task" FontSize="19" FontWeight="SemiBold" />
@@ -42,53 +54,65 @@
                 <Button Content="Record New Skill" Width="170" HorizontalAlignment="Left" Click="BuildSkill_Click" Background="{StaticResource AccentDarkBrush}" />
               </StackPanel>
             </Border>
+            <Border Background="#111C2D" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="18" Margin="0,16,0,0">
+              <StackPanel>
+                <TextBlock Text="Before you start" FontSize="17" FontWeight="SemiBold" />
+                <TextBlock Text="Keep the target app visible, close unrelated windows, allow microphone access if you want narration, and avoid passwords or private values. AI is optional: the local draft works without a provider key." Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,8,0,0" />
+              </StackPanel>
+            </Border>
           </StackPanel>
 
           <StackPanel x:Name="SetupPanel" Visibility="Collapsed">
-            <TextBlock Text="New recording" FontSize="28" FontWeight="SemiBold" />
-            <TextBlock Text="Keep the recording visible. Explain changing values, optional steps, secrets, conditions, and what success looks like." Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,8,0,16" />
+            <TextBlock Text="Step 1 of 3 - Recording setup" FontSize="28" FontWeight="SemiBold" />
+            <TextBlock Text="Choose what to capture, then narrate the intent, changing values, optional branches, secrets, and what success looks like." Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,8,0,16" />
+            <Border Background="#111C2D" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,0,14">
+              <TextBlock x:Name="SetupPreflight" Text="Checking Windows capture and microphone access..." TextWrapping="Wrap" Foreground="{StaticResource InkBrush}" />
+            </Border>
             <Label Content="Skill title" />
             <TextBox x:Name="TitleBox" Text="Computer workflow" />
             <Label Content="Capture source" />
-            <ComboBox x:Name="CaptureModeBox" SelectionChanged="CaptureMode_Changed">
+            <ComboBox x:Name="CaptureModeBox" SelectedIndex="0" SelectionChanged="CaptureMode_Changed">
               <ComboBoxItem Content="Entire display" Tag="Display" />
               <ComboBoxItem Content="Selected window" Tag="Window" />
             </ComboBox>
             <Label Content="Window (used for selected-window capture)" />
             <ComboBox x:Name="WindowBox" DisplayMemberPath="Title" />
-            <TextBlock Text="Microphone narration is captured only while recording. Audio is timestamped, transcribed, attached to nearby actions, and used to infer intent. Typed characters and clipboard contents are not persisted." Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,12,0,20" />
+            <TextBlock Text="Microphone narration is optional but strongly recommended. It is timestamped, transcribed, and attached to nearby actions. Typed characters and clipboard contents are not persisted." Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,12,0,20" />
             <StackPanel Orientation="Horizontal">
-              <Button Content="Start Recording" Click="StartRecording_Click" Background="{StaticResource AccentDarkBrush}" />
+              <Button x:Name="StartRecordingButton" Content="Start Recording" Click="StartRecording_Click" Background="{StaticResource AccentDarkBrush}" />
               <Button Content="Cancel" Click="Home_Click" />
             </StackPanel>
           </StackPanel>
 
           <StackPanel x:Name="RecordingPanel" Visibility="Collapsed">
             <Image Source="/OhMySkill;component/Assets/Branding/p3.png" Width="56" Height="56" Stretch="Uniform" HorizontalAlignment="Left" AutomationProperties.Name="Oh My Skill logo" />
-            <TextBlock Text="Recording" FontSize="28" FontWeight="SemiBold" />
-            <TextBlock x:Name="RecordingTimer" Text="00:00" FontSize="44" FontWeight="SemiBold" Margin="0,14,0,8" />
-            <TextBlock x:Name="AudioStatus" Text="Microphone: checking" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,4" />
-            <TextBlock x:Name="RecordingStatus" Text="Recording screen and interaction context…" Foreground="{StaticResource MutedBrush}" />
+            <TextBlock Text="Step 2 of 3 - Record and narrate" FontSize="28" FontWeight="SemiBold" />
+            <TextBlock Text="Perform the task at a normal pace. Use Mark Step when a decision or important result should be explicit." Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,8,0,0" />
+            <TextBlock x:Name="RecordingTimer" Text="00:00" FontSize="44" FontWeight="SemiBold" Margin="0,14,0,2" />
+            <TextBlock x:Name="RecordingStats" Text="0 actions - 0 buffered frames - 0s audio" Foreground="{StaticResource MutedBrush}" />
+            <TextBlock x:Name="AudioStatus" Text="Microphone: checking" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,4" />
+            <TextBlock x:Name="RecordingStatus" Text="Starting screen and interaction capture..." Foreground="{StaticResource MutedBrush}" />
             <Border Background="#4B1F2B" BorderBrush="#9C4B5D" BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,22,0,22">
-              <TextBlock Text="Recording is active. Do not enter passwords or private information unless you mark it private immediately." TextWrapping="Wrap" Foreground="#FFD8E0" />
+              <TextBlock Text="Recording is active. Do not enter passwords or private information unless you redact it immediately." TextWrapping="Wrap" Foreground="#FFD8E0" />
             </Border>
             <StackPanel Orientation="Horizontal">
-              <Button Content="Mark Step" Click="MarkStep_Click" />
-              <Button Content="Redact Last 15 Seconds" ToolTip="Removes recent frames and events; the complete microphone recording is discarded for safety." Click="Redact_Click" />
-              <Button Content="Finish &amp; Build Draft" Click="FinishRecording_Click" Background="{StaticResource AccentDarkBrush}" />
+              <Button x:Name="MarkStepButton" Content="Mark Step" Click="MarkStep_Click" />
+              <Button x:Name="RedactButton" Content="Redact Last 15 Seconds" ToolTip="Removes recent frames, events, and audio from the saved evidence." Click="Redact_Click" />
+              <Button x:Name="FinishRecordingButton" Content="Finish &amp; Build Draft" Click="FinishRecording_Click" Background="{StaticResource AccentDarkBrush}" />
             </StackPanel>
             <TextBlock x:Name="EventPreview" TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,22,0,0" />
           </StackPanel>
 
           <StackPanel x:Name="ReviewPanel" Visibility="Collapsed">
             <Image Source="/OhMySkill;component/Assets/Branding/p3.png" Width="56" Height="56" Stretch="Uniform" HorizontalAlignment="Left" AutomationProperties.Name="Oh My Skill logo" />
-            <TextBlock Text="Review the generated skill" FontSize="28" FontWeight="SemiBold" />
-            <TextBlock x:Name="ReviewStatus" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,8,0,14" />
+            <TextBlock Text="Step 3 of 3 - Review and save" FontSize="28" FontWeight="SemiBold" />
+            <TextBlock Text="The app does not execute the workflow. Review every evidence pair, edit the draft, then save one local SKILL.md." Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,8,0,14" />
+            <TextBlock x:Name="ReviewStatus" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,0,0,14" />
             <Border Background="#111C2D" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,0,14">
               <TextBlock x:Name="EvidenceSummary" TextWrapping="Wrap" Foreground="{StaticResource InkBrush}" />
             </Border>
             <Label Content="Action evidence (before / after)" />
-            <ListBox x:Name="EvidenceList" MaxHeight="300" Background="#0B1220" BorderBrush="{StaticResource PanelBorderBrush}" Foreground="{StaticResource InkBrush}" Margin="0,0,0,14">
+            <ListBox x:Name="EvidenceList" MaxHeight="320" Background="#0B1220" BorderBrush="{StaticResource PanelBorderBrush}" Foreground="{StaticResource InkBrush}" Margin="0,0,0,14">
               <ListBox.ItemTemplate>
                 <DataTemplate>
                   <Border BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="0,0,0,1" Padding="8">
@@ -106,34 +130,38 @@
               </ListBox.ItemTemplate>
             </ListBox>
             <Label Content="Skill name" />
-            <TextBox x:Name="ReviewNameBox" />
+            <TextBox x:Name="ReviewNameBox" TextChanged="ReviewInput_Changed" />
             <Label Content="Description" />
-            <TextBox x:Name="ReviewDescriptionBox" />
+            <TextBox x:Name="ReviewDescriptionBox" TextChanged="ReviewInput_Changed" />
             <Label Content="Inferred user intent" />
-            <TextBox x:Name="ReviewIntentBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="55" />
+            <TextBox x:Name="ReviewIntentBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="55" TextChanged="ReviewInput_Changed" />
             <Label Content="Goal" />
-            <TextBox x:Name="ReviewGoalBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="55" />
+            <TextBox x:Name="ReviewGoalBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="55" TextChanged="ReviewInput_Changed" />
             <Label Content="Required inputs (one per line: name | description | secret=true/false)" />
-            <TextBox x:Name="ReviewInputsBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="70" />
+            <TextBox x:Name="ReviewInputsBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="70" TextChanged="ReviewInput_Changed" />
             <Label Content="Procedure (one step per line)" />
-            <TextBox x:Name="ReviewProcedureBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="150" />
+            <TextBox x:Name="ReviewProcedureBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="150" TextChanged="ReviewInput_Changed" />
             <Label Content="Safety" />
-            <TextBox x:Name="ReviewSafetyBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" />
+            <TextBox x:Name="ReviewSafetyBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" TextChanged="ReviewInput_Changed" />
             <Label Content="Verification" />
-            <TextBox x:Name="ReviewVerificationBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="70" />
+            <TextBox x:Name="ReviewVerificationBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="70" TextChanged="ReviewInput_Changed" />
             <Label Content="Recovery" />
-            <TextBox x:Name="ReviewRecoveryBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="70" />
-            <TextBlock Text="Preview" FontSize="18" FontWeight="SemiBold" Margin="0,18,0,6" />
-            <TextBox x:Name="MarkdownPreviewBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" MinHeight="300" />
+            <TextBox x:Name="ReviewRecoveryBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="70" TextChanged="ReviewInput_Changed" />
+            <Expander Header="SKILL.md preview (updates as you edit)" IsExpanded="True" Margin="0,18,0,0">
+              <TextBox x:Name="MarkdownPreviewBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" MinHeight="300" Margin="0,8,0,0" />
+            </Expander>
+            <TextBlock x:Name="SavedPathText" Foreground="{StaticResource SuccessBrush}" TextWrapping="Wrap" Margin="0,12,0,0" />
             <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
-              <Button Content="Save SKILL.md" Click="SaveSkill_Click" Background="{StaticResource AccentDarkBrush}" />
+              <Button x:Name="SaveSkillButton" Content="Save SKILL.md" Click="SaveSkill_Click" Background="{StaticResource AccentDarkBrush}" />
+              <Button x:Name="OpenOutputButton" Content="Open output folder" Click="OpenOutputFolder_Click" IsEnabled="False" />
+              <Button x:Name="CopyPromptButton" Content="Copy agent prompt" Click="CopyPrompt_Click" IsEnabled="False" />
               <Button Content="Back to Home" Click="Home_Click" />
             </StackPanel>
           </StackPanel>
 
           <StackPanel x:Name="SettingsPanel" Visibility="Collapsed">
             <TextBlock Text="AI settings" FontSize="28" FontWeight="SemiBold" />
-            <TextBlock Text="BYOK keys are encrypted with Windows DPAPI for this user. Leave AI disabled to generate a deterministic local draft from captured events." Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,8,0,16" />
+            <TextBlock Text="BYOK keys are encrypted with Windows DPAPI for this user. Leave AI disabled to generate a deterministic local draft from captured events. Provider calls may take time; the app shows progress and can be canceled." Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,8,0,16" />
             <Label Content="Provider" />
             <ComboBox x:Name="ProviderBox" SelectionChanged="Provider_Changed" />
             <Label Content="Endpoint" />
@@ -145,12 +173,24 @@
             <CheckBox x:Name="UseAiBox" Content="Use this provider to create the draft" Foreground="{StaticResource InkBrush}" Margin="0,14,0,18" />
             <StackPanel Orientation="Horizontal">
               <Button Content="Save Settings" Click="SaveSettings_Click" Background="{StaticResource AccentDarkBrush}" />
-              <Button Content="Test Connection" Click="TestConnection_Click" />
+              <Button x:Name="TestConnectionButton" Content="Test Connection" Click="TestConnection_Click" />
             </StackPanel>
             <TextBlock x:Name="SettingsStatus" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,18,0,0" />
           </StackPanel>
         </Grid>
       </ScrollViewer>
     </Grid>
+
+    <Border x:Name="BusyOverlay" Grid.RowSpan="2" Background="#E60A101C" Visibility="Collapsed" Panel.ZIndex="10">
+      <Border Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1" CornerRadius="12" Width="440" Padding="24" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <StackPanel>
+          <Image Source="/OhMySkill;component/Assets/Branding/p3.png" Width="52" Height="52" Stretch="Uniform" HorizontalAlignment="Left" AutomationProperties.Name="Oh My Skill logo" />
+          <TextBlock x:Name="BusyTitle" Text="Working..." FontSize="22" FontWeight="SemiBold" Margin="0,14,0,4" />
+          <TextBlock x:Name="BusyDetail" Text="Please wait." Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" />
+          <ProgressBar x:Name="BusyProgress" IsIndeterminate="True" Height="6" Margin="0,18,0,16" />
+          <Button x:Name="CancelBusyButton" Content="Cancel" Click="CancelBusy_Click" HorizontalAlignment="Left" IsEnabled="False" />
+        </StackPanel>
+      </Border>
+    </Border>
   </Grid>
 </Window>

@@ -1,49 +1,43 @@
-# Oh My Skill v0.2.0
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="src/OhMySkill/Assets/Branding/p3.png">
-    <source media="(prefers-color-scheme: light)" srcset="src/OhMySkill/Assets/Branding/p2.png">
-    <img src="src/OhMySkill/Assets/Branding/p2.png" width="96" alt="Oh My Skill logo">
-  </picture>
-</p>
+# Oh My Skill v0.2.1
 
 ## Release status
 
-This release candidate is prepared for x64 and ARM64 Windows. Public signing is
-still pending; unsigned artifacts must not be presented as production-trusted
-downloads. The signed release workflow in
-`.github/workflows/signed-windows-release.yml` remains the production gate.
+This is an open-source Windows preview for x64 and ARM64. The binaries are
+self-contained and intentionally unsigned; verify `SHA256SUMS.txt` before
+running them. The fail-closed signing workflow remains available for a future
+trusted release.
 
-## Highlights
+## What changed
 
-- Captures synchronized microphone narration, screen evidence, and high-level
-  computer interaction context.
-- Associates a settled before/after frame pair with each logical action.
-- Uses nearby narration and the complete ordered trajectory to infer intent,
-  procedure, safety, verification, and recovery.
-- Supports deterministic local drafting and optional BYOK provider processing.
-- Reviews evidence before saving one portable `SKILL.md` and an agent prompt.
-- Deletes temporary encrypted audio, frames, and traces after a successful save.
-- Ships the original Oh My Skill cyan mark and monochrome fallbacks throughout
-  the desktop application and documentation.
+- Moved recording startup, stop/finalization, encrypted evidence reads, and
+  skill saving away from the WPF dispatcher so the window remains responsive.
+- Added a visible busy card with a progress bar, current operation, and a safe
+  cancel path for transcription, provider calls, and connection tests.
+- Added live recording status: elapsed time, action count, buffered frames,
+  microphone level, and captured audio duration.
+- Added setup preflight feedback for microphone and visible-window discovery.
+- Added an ordered review flow with explicit steps, before/after thumbnails,
+  narration, interpretation, confidence, and evidence warnings.
+- Made the `SKILL.md` preview update as the user edits the draft.
+- Replaced blocking save dialogs with inline success/error state and buttons to
+  open the output folder or copy the universal agent prompt.
+- Added architecture-specific ZIP downloads containing the executable,
+  README, installation guide, license, and privacy notice.
+- Kept the supplied Oh My Skill cyan mark throughout the app and release docs.
 
-## Artifacts
+## Evidence behavior
 
-The release assets use these names:
-
-- `OhMySkill-win-x64.exe`
-- `OhMySkill-win-arm64.exe`
-- `SHA256SUMS.txt`
-
-Verify the SHA-256 values before running an artifact. See
-[INSTALLATION.md](INSTALLATION.md), [SIGNING.md](SIGNING.md), and the
-[code signing policy](CODE_SIGNING_POLICY.md) for distribution and trust
-requirements.
+The recorder keeps a bounded in-memory rolling frame buffer, stores a settled
+after-action frame for each logical interaction, records timestamped encrypted
+microphone chunks, and writes only the final `SKILL.md` plus prompt after a
+successful save. No full video, MCP server, executor, telemetry, or database
+is added.
 
 ## Known limitations
 
-- This release is Windows-only and does not retain a full recording video.
+- Windows-only; no full recording video is retained.
 - Windows Speech fallback depends on an installed recognition language.
-- Provider capability and retention policies vary; AI processing is opt-in.
+- Provider capability and retention policies vary; AI processing is opt-in and
+  BYOK.
+- New unsigned downloads can show a SmartScreen reputation warning.
 - Generated skills require human review and are not executed by this app.

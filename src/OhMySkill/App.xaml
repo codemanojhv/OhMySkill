@@ -9,6 +9,7 @@
     <SolidColorBrush x:Key="PanelBorderBrush" Color="#24324A" />
     <SolidColorBrush x:Key="AccentBrush" Color="#79A8FF" />
     <SolidColorBrush x:Key="AccentDarkBrush" Color="#1A4F9C" />
+    <SolidColorBrush x:Key="SuccessBrush" Color="#75D6A2" />
     <SolidColorBrush x:Key="DangerBrush" Color="#FF8D8D" />
     <Style TargetType="TextBlock">
       <Setter Property="Foreground" Value="{StaticResource InkBrush}" />

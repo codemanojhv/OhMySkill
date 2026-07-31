@@ -105,10 +105,22 @@ jobs:
             Write-Host "$($item.Key): $($signature.SignerCertificate.Subject); timestamp $($signature.TimeStamperCertificate.NotBefore)"
           }
 
+      - name: Package architecture ZIPs
+        shell: pwsh
+        run: |
+          foreach ($architecture in @('x64', 'arm64')) {
+            $staging = Join-Path $env:RUNNER_TEMP "OhMySkill-$architecture"
+            New-Item -ItemType Directory -Path $staging -Force | Out-Null
+            Copy-Item (Join-Path .\artifacts\release "OhMySkill-win-$architecture.exe") (Join-Path $staging "OhMySkill.exe")
+            Copy-Item .\README.md, .\INSTALLATION.md, .\LICENSE, .\PRIVACY.md $staging
+            $zip = Join-Path .\artifacts\release "OhMySkill-${{ inputs.version }}-win-$architecture.zip"
+            Compress-Archive -Path (Join-Path $staging '*') -DestinationPath $zip -Force
+          }
+
       - name: Generate checksums
         shell: pwsh
         run: |
-          $lines = Get-ChildItem .\artifacts\release\*.exe | Sort-Object Name | ForEach-Object {
+          $lines = Get-ChildItem .\artifacts\release -File | Where-Object { $_.Extension -in '.exe', '.zip' } | Sort-Object Name | ForEach-Object {
             $hash = Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256
             "$($hash.Hash.ToLowerInvariant())  $($_.Name)"
           }
@@ -131,4 +143,6 @@ jobs:
           files: |
             artifacts/release/OhMySkill-win-x64.exe
             artifacts/release/OhMySkill-win-arm64.exe
+            artifacts/release/OhMySkill-${{ inputs.version }}-win-x64.zip
+            artifacts/release/OhMySkill-${{ inputs.version }}-win-arm64.zip
             artifacts/release/SHA256SUMS.txt

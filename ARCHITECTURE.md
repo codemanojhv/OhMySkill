@@ -1,4 +1,4 @@
-# Oh My Skill v0.2 architecture
+# Oh My Skill v0.2.1 architecture
 
 Oh My Skill records a narrated Windows workflow, pairs every logical interaction with before/after screen evidence, and stops after saving a reviewed local `SKILL.md` plus a universal agent prompt.
 
@@ -31,6 +31,9 @@ flowchart TD
     L --> R
     R --> O["Local SKILL.md + USE_THIS_SKILL.txt"]
     O --> D["Delete temporary evidence"]
+    UI["WPF dispatcher: status, preview, and review only"] -.-> P
+    AI2 -.-> UI
+    O -.-> UI
 ```
 
 ## Technology
@@ -42,6 +45,7 @@ flowchart TD
 - `HttpClient` BYOK adapters for action-level vision/audio interpretation, complete-trajectory synthesis, critic refinement, transcription, and explicit capability fallbacks.
 - Supplied cyan/monochrome branding assets embedded as WPF resources and the application icon.
 - Self-contained single-file `win-x64` and `win-arm64` EXEs.
+- Capture start, session finalization, evidence reads, transcription, provider calls, and saving run on background tasks. The WPF dispatcher is reserved for status updates, cancellation, thumbnails, and editing so long recordings do not freeze the window.
 
 ## Product boundary
 
