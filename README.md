@@ -18,9 +18,9 @@ It is designed for work that happens anywhere on a Windows computer—not only i
 
 The v0.2 workflow targets the user-visible “Record a Skill” pattern: record a demonstration with narration, interpret each action, synthesize the full trajectory, review the result, and save a portable skill. It does not claim to reproduce another product’s unpublished internal implementation.
 
-> **Status:** v0.2.0 release candidate. It uses synchronized action-level audio/visual interpretation, full-trajectory context, synthesis, and an evidence critic. The repository includes a fail-closed Microsoft Artifact Signing release workflow; a trusted public signer must be provisioned before production downloads are published.
+> **Status:** v0.2.1 open-source preview. It uses synchronized action-level audio/visual interpretation, full-trajectory context, synthesis, and an evidence critic. Recording finalization, evidence loading, transcription, and saving now report visible progress without blocking the WPF window. The repository includes a fail-closed Microsoft Artifact Signing release workflow for future trusted production builds.
 
-See [RELEASE_NOTES.md](RELEASE_NOTES.md) for the v0.2.0 release scope and
+See [RELEASE_NOTES.md](RELEASE_NOTES.md) for the v0.2.1 release scope and
 [BRANDING.md](BRANDING.md) for the original logo artwork and usage map.
 
 ## Product boundary
@@ -174,13 +174,13 @@ Local developer builds are unsigned. Public releases must be produced by the fai
 
 ### Run a published build
 
-Download the architecture-appropriate executable from the repository Releases page and run it. For most PCs, choose the x64 asset:
+Download and extract the architecture-appropriate ZIP from the repository Releases page. For most PCs, choose:
 
 ~~~text
-OhMySkill-win-x64.exe
+OhMySkill-v0.2.1-win-x64.zip
 ~~~
 
-The app does not need the .NET runtime when using a self-contained release asset.
+Run `OhMySkill.exe` from the extracted folder. The app does not need the .NET runtime when using a self-contained release asset. The standalone EXE is also available for portable users; the ZIP is recommended because it keeps setup, license, and privacy information beside the executable.
 
 ### Build from source
 
@@ -233,7 +233,7 @@ OhMySkill/
 ├── README.md                         Product, architecture, build, and privacy documentation
 ├── BRANDING.md                       Logo asset map and rights statement
 ├── CODE_SIGNING_POLICY.md            Release signing policy and roles
-├── RELEASE_NOTES.md                  v0.2.0 release scope and limitations
+├── RELEASE_NOTES.md                  v0.2.1 release scope and limitations
 ├── ARCHITECTURE.md                   Short architecture overview and Mermaid flow
 ├── OhMySkill.sln                 Solution containing the app and self-check project
 ├── src/OhMySkill/

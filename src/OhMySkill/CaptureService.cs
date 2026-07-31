@@ -6,7 +6,6 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Interop;
-using System.Windows.Threading;
 
 namespace OhMySkill;
 
@@ -128,8 +127,16 @@ public sealed class MicrophoneRecorder : IDisposable
     [DllImport("winmm.dll")] private static extern uint waveInReset(IntPtr handle);
     [DllImport("winmm.dll")] private static extern uint waveInClose(IntPtr handle);
 
-    public bool IsAvailable => waveInGetNumDevs() > 0;
+    public static bool HasInputDevice => waveInGetNumDevs() > 0;
+    public bool IsAvailable => HasInputDevice;
     public double Level => Volatile.Read(ref _level);
+    public long CapturedMilliseconds
+    {
+        get
+        {
+            lock (_gate) return _pcm.Length / 32L;
+        }
+    }
 
     public bool Start()
     {
@@ -200,7 +207,7 @@ public sealed class MicrophoneRecorder : IDisposable
 public sealed class RecordingController : IDisposable
 {
     private sealed record BufferedFrame(long ElapsedMilliseconds, byte[] Png);
-    private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(250) };
+    private readonly System.Threading.Timer _captureTimer;
     private readonly Stopwatch _clock = new();
     private readonly SecureSessionStore _store;
     private readonly MicrophoneRecorder _microphone = new();
@@ -210,6 +217,7 @@ public sealed class RecordingController : IDisposable
     private readonly List<Task> _pendingActions = [];
     private readonly List<(long Start, long End)> _redactedRanges = [];
     private readonly object _gate = new();
+    private int _captureInProgress;
     private int _frame;
     private long _lastTrajectoryMilliseconds = -5000;
     private byte[]? _lastTrajectoryFrame;
@@ -219,6 +227,9 @@ public sealed class RecordingController : IDisposable
     public string TemporaryFolder => _store.Folder;
     public byte[] AudioWav { get; private set; } = [];
     public double MicrophoneLevel => _microphone.Level;
+    public long CapturedAudioMilliseconds => _microphone.CapturedMilliseconds;
+    public int ActionCount => Trace.Actions.Count;
+    public int BufferedFrameCount { get { lock (_gate) return _rollingFrames.Count; } }
     public event Action<TraceEvent>? EventRecorded;
 
     public RecordingController(string title, CaptureMode mode, IntPtr window)
@@ -226,7 +237,7 @@ public sealed class RecordingController : IDisposable
         _mode = mode; _window = window;
         Trace = new RecordingTrace { Title = string.IsNullOrWhiteSpace(title) ? "Computer workflow" : title, CaptureMode = mode, CaptureTarget = window == IntPtr.Zero ? "display" : window.ToString() };
         _store = new SecureSessionStore(Trace.Id);
-        _timer.Tick += (_, _) => CaptureRollingFrame();
+        _captureTimer = new System.Threading.Timer(_ => CaptureRollingFrame(), null, Timeout.Infinite, Timeout.Infinite);
     }
 
     public void Start()
@@ -236,8 +247,8 @@ public sealed class RecordingController : IDisposable
         Trace.Events.Add(new TraceEvent(0, TraceEventKind.SessionStarted, "Recording started", null, null, null, null));
         Trace.HasAudio = _microphone.Start();
         if (!Trace.HasAudio) Trace.Notes.Add("No microphone was available; narration cannot be transcribed.");
-        _timer.Start();
         CaptureAndStoreFrame("initial", FrameRole.Initial);
+        _captureTimer.Change(250, 250);
     }
 
     public void Mark(string text = "User marked a meaningful step")
@@ -248,6 +259,7 @@ public sealed class RecordingController : IDisposable
 
     private void CaptureRollingFrame()
     {
+        if (Interlocked.Exchange(ref _captureInProgress, 1) == 1) return;
         try
         {
             var bytes = ScreenCapture.Capture(_mode, _window, 1280);
@@ -270,6 +282,7 @@ public sealed class RecordingController : IDisposable
             }
         }
         catch (Exception ex) { Trace.Notes.Add("Frame buffer warning: " + ex.Message); }
+        finally { Volatile.Write(ref _captureInProgress, 0); }
     }
 
     private FrameEvidence? LatestBefore(long elapsed, Guid actionId)
@@ -484,7 +497,9 @@ public sealed class RecordingController : IDisposable
     public async Task StopAsync()
     {
         if (_stopped) return;
-        _timer.Stop();
+        _captureTimer.Change(Timeout.Infinite, Timeout.Infinite);
+        for (var wait = 0; wait < 20 && Volatile.Read(ref _captureInProgress) != 0; wait++)
+            await Task.Delay(10).ConfigureAwait(false);
         try { await Task.WhenAll(_pendingActions).ConfigureAwait(false); } catch { }
         _stopped = true;
         _clock.Stop();
@@ -534,5 +549,5 @@ public sealed class RecordingController : IDisposable
 
     public void Stop() => StopAsync().GetAwaiter().GetResult();
     public void DeleteTemporarySession() => _store.DeleteAfterSave();
-    public void Dispose() { try { Stop(); } catch { } _microphone.Dispose(); }
+    public void Dispose() { try { Stop(); } catch { } _captureTimer.Dispose(); _microphone.Dispose(); }
 }
