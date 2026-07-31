@@ -27,7 +27,7 @@
 4. Optional but recommended: verify the ZIP or EXE hash against `SHA256SUMS.txt` from the same release.
 5. Run `OhMySkill.exe` from the extracted folder.
 
-The ZIP is the recommended download because it keeps the executable, instructions, license, and privacy notice together. The standalone EXE is also published as a portable option; it does not install a service or register startup tasks.
+The v0.2.1 release intentionally exposes ZIPs instead of making the browser hand you a bare executable. Each ZIP contains `OhMySkill.exe`, instructions, the license, and the privacy notice. Extracted builds remain portable: they do not install a service or register startup tasks.
 
 ### Windows warning about an unsigned preview
 

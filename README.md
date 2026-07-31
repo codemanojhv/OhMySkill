@@ -180,7 +180,7 @@ Download and extract the architecture-appropriate ZIP from the repository Releas
 OhMySkill-v0.2.1-win-x64.zip
 ~~~
 
-Run `OhMySkill.exe` from the extracted folder. The app does not need the .NET runtime when using a self-contained release asset. The standalone EXE is also available for portable users; the ZIP is recommended because it keeps setup, license, and privacy information beside the executable.
+Run `OhMySkill.exe` from the extracted folder. The app does not need the .NET runtime when using a self-contained release asset. The v0.2.1 release intentionally ships ZIPs so setup, license, and privacy information stay beside the executable instead of prompting a direct EXE download.
 
 ### Build from source
 

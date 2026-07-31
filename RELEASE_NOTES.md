@@ -7,6 +7,10 @@ self-contained and intentionally unsigned; verify `SHA256SUMS.txt` before
 running them. The fail-closed signing workflow remains available for a future
 trusted release.
 
+The public release assets are architecture-specific ZIPs. Each ZIP contains
+the matching `OhMySkill.exe`, README, installation guide, license, and privacy
+notice; no bare EXE is presented as the primary download.
+
 ## What changed
 
 - Moved recording startup, stop/finalization, encrypted evidence reads, and
