@@ -1,4 +1,4 @@
-# Oh My Skill v0.2.1
+# Oh My Skill v0.3.0
 
 ## Release status
 
@@ -12,6 +12,14 @@ the matching `OhMySkill.exe`, README, installation guide, license, and privacy
 notice; no bare EXE is presented as the primary download.
 
 ## What changed
+
+- Added timestamped narration segments with provider, local, or estimated timing labels.
+- Linked narration segments to nearby before/after image evidence and exposed those links in review.
+- Added transcript editing that preserves timestamps and image references.
+- Added **Regenerate with AI** so an edited transcript or evidence decision can rebuild the skill.
+- Passed paired images, interaction metadata, timestamped narration, and native audio to capable providers.
+- Added microphone failure, captured-byte, peak-level, and near-silence diagnostics.
+- Extended self-checks for timestamp fallback and image-reference propagation into AI prompts.
 
 - Moved recording startup, stop/finalization, encrypted evidence reads, and
   skill saving away from the WPF dispatcher so the window remains responsive.
@@ -41,7 +49,7 @@ is added.
 
 - Windows-only; no full recording video is retained.
 - Windows Speech fallback depends on an installed recognition language.
-- Provider capability and retention policies vary; AI processing is opt-in and
-  BYOK.
+- Provider capability and retention policies vary; AI processing is BYOK and
+  enabled by default only when a saved provider key is available.
 - New unsigned downloads can show a SmartScreen reputation warning.
 - Generated skills require human review and are not executed by this app.

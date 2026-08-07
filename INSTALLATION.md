@@ -21,13 +21,13 @@
 
 1. Open the repository [Releases](https://github.com/codemanojhv/OhMySkill/releases) page.
 2. Download the ZIP that matches the computer:
-   - `OhMySkill-v0.2.1-win-x64.zip` for Intel/AMD 64-bit Windows.
-   - `OhMySkill-v0.2.1-win-arm64.zip` for ARM64 Windows.
+   - `OhMySkill-v0.3.0-win-x64.zip` for Intel/AMD 64-bit Windows.
+   - `OhMySkill-v0.3.0-win-arm64.zip` for ARM64 Windows.
 3. Extract the ZIP to a folder you control, for example `E:\Apps\Oh My Skill`.
 4. Optional but recommended: verify the ZIP or EXE hash against `SHA256SUMS.txt` from the same release.
 5. Run `OhMySkill.exe` from the extracted folder.
 
-The v0.2.1 release intentionally exposes ZIPs instead of making the browser hand you a bare executable. Each ZIP contains `OhMySkill.exe`, instructions, the license, and the privacy notice. Extracted builds remain portable: they do not install a service or register startup tasks.
+The v0.3.0 release intentionally exposes ZIPs instead of making the browser hand you a bare executable. Each ZIP contains `OhMySkill.exe`, instructions, the license, and the privacy notice. Extracted builds remain portable: they do not install a service or register startup tasks.
 
 ### Windows warning about an unsigned preview
 

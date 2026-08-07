@@ -10,17 +10,17 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-cyan.svg)](LICENSE)
 
-The v0.2 desktop shell uses the supplied cyan Oh My Skill mark for dark and light surfaces, with monochrome variants for high-contrast contexts. Branding assets live under `src/OhMySkill/Assets/Branding`.
+The v0.3 desktop shell uses the supplied cyan Oh My Skill mark for dark and light surfaces, with monochrome variants for high-contrast contexts. Branding assets live under `src/OhMySkill/Assets/Branding`.
 
 Oh My Skill is a local-first Windows desktop application that turns a demonstrated computer workflow into a reviewed, portable <code>SKILL.md</code> file for an AI agent.
 
 It is designed for work that happens anywhere on a Windows computer—not only in a browser. Demonstrate a task in a desktop application, file manager, terminal, browser, or mixed workflow; explain the intent through the microphone; review the generated instructions; then save the skill locally and paste the included agent prompt into Codex, OpenCode, Claude Code, Hermes, or another agent that can use the required computer tools.
 
-The v0.2 workflow targets the user-visible “Record a Skill” pattern: record a demonstration with narration, interpret each action, synthesize the full trajectory, review the result, and save a portable skill. It does not claim to reproduce another product’s unpublished internal implementation.
+The v0.3 workflow targets the user-visible “Record a Skill” pattern: record a demonstration with narration, align timestamped narration to before/after evidence frames and interactions, interpret each action, synthesize the full trajectory, review or edit the evidence, and save a portable skill. It does not claim to reproduce another product’s unpublished internal implementation.
 
-> **Status:** v0.2.1 open-source preview. It uses synchronized action-level audio/visual interpretation, full-trajectory context, synthesis, and an evidence critic. Recording finalization, evidence loading, transcription, and saving now report visible progress without blocking the WPF window. The repository includes a fail-closed Microsoft Artifact Signing release workflow for future trusted production builds.
+> **Status:** v0.3.0 open-source preview. It uses synchronized action-level audio/visual interpretation, timestamped narration, linked evidence frames, full-trajectory synthesis, editable review, and an evidence critic. Recording finalization, evidence loading, transcription, and saving now report visible progress without blocking the WPF window. The repository includes a fail-closed Microsoft Artifact Signing release workflow for future trusted production builds.
 
-See [RELEASE_NOTES.md](RELEASE_NOTES.md) for the v0.2.1 release scope and
+See [RELEASE_NOTES.md](RELEASE_NOTES.md) for the v0.3.0 release scope and
 [BRANDING.md](BRANDING.md) for the original logo artwork and usage map.
 
 ## Product boundary
@@ -177,10 +177,10 @@ Local developer builds are unsigned. Public releases must be produced by the fai
 Download and extract the architecture-appropriate ZIP from the repository Releases page. For most PCs, choose:
 
 ~~~text
-OhMySkill-v0.2.1-win-x64.zip
+OhMySkill-v0.3.0-win-x64.zip
 ~~~
 
-Run `OhMySkill.exe` from the extracted folder. The app does not need the .NET runtime when using a self-contained release asset. The v0.2.1 release intentionally ships ZIPs so setup, license, and privacy information stay beside the executable instead of prompting a direct EXE download.
+Run `OhMySkill.exe` from the extracted folder. The app does not need the .NET runtime when using a self-contained release asset. The v0.3.0 release intentionally ships ZIPs so setup, license, and privacy information stay beside the executable instead of prompting a direct EXE download.
 
 ### Build from source
 
@@ -233,7 +233,7 @@ OhMySkill/
 ├── README.md                         Product, architecture, build, and privacy documentation
 ├── BRANDING.md                       Logo asset map and rights statement
 ├── CODE_SIGNING_POLICY.md            Release signing policy and roles
-├── RELEASE_NOTES.md                  v0.2.1 release scope and limitations
+├── RELEASE_NOTES.md                  v0.3.0 release scope and limitations
 ├── ARCHITECTURE.md                   Short architecture overview and Mermaid flow
 ├── OhMySkill.sln                 Solution containing the app and self-check project
 ├── src/OhMySkill/
@@ -297,7 +297,7 @@ The generated prompt is intentionally tool-agnostic. It tells an agent to read t
 1. Open **AI Settings**.
 2. Select a provider.
 3. Confirm or edit the endpoint and model.
-4. Enter the API key and select **Use this provider to create the draft**.
+4. Enter the API key and select **Use this provider to create the draft**. When a saved provider key is available, setup enables AI building by default; you can turn it off for a local-only draft.
 5. Save settings and use **Test Connection** before recording a valuable workflow.
 
 The generic adapter expects an OpenAI-compatible <code>/chat/completions</code> endpoint and, for transcription, <code>/audio/transcriptions</code>. Custom providers can be configured by selecting **Custom OpenAI-compatible** and entering the complete base endpoint. Do not place secrets in issue reports, screenshots, README files, or commits.

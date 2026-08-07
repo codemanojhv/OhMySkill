@@ -135,7 +135,10 @@ public sealed class AiProviderService
         return response.IsSuccessStatusCode;
     }
 
-    public async Task<string?> TranscribeAsync(byte[] wav, AiSettings settings, CancellationToken cancellationToken = default)
+    public async Task<string?> TranscribeAsync(byte[] wav, AiSettings settings, CancellationToken cancellationToken = default) =>
+        (await TranscribeDetailedAsync(wav, settings, cancellationToken))?.Text;
+
+    public async Task<TranscriptionResult?> TranscribeDetailedAsync(byte[] wav, AiSettings settings, CancellationToken cancellationToken = default)
     {
         LastTranscriptionSource = "Unavailable";
         if (wav.Length == 0) return null;
@@ -151,10 +154,10 @@ public sealed class AiProviderService
                     "Anthropic" => null,
                     _ => await OpenAiCompatibleTranscribe(wav, settings, SettingsStore.GetApiKey(settings), cancellationToken)
                 };
-                if (!string.IsNullOrWhiteSpace(remote))
+                if (remote is not null && !string.IsNullOrWhiteSpace(remote.Text))
                 {
-                    LastTranscriptionSource = settings.Provider + " transcription";
-                    return remote.Trim();
+                    LastTranscriptionSource = remote.Source;
+                    return remote;
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -163,11 +166,11 @@ public sealed class AiProviderService
             }
         }
 
-        var local = await LocalSpeechTranscriber.TryTranscribeAsync(wav, cancellationToken);
-        if (!string.IsNullOrWhiteSpace(local))
+        var local = await LocalSpeechTranscriber.TryTranscribeDetailedAsync(wav, cancellationToken);
+        if (local is not null && !string.IsNullOrWhiteSpace(local.Text))
         {
             LastTranscriptionSource = "Windows Speech";
-            return local.Trim();
+            return local;
         }
         if (remoteError is not null) throw new InvalidOperationException($"AI transcription failed and Windows local speech recognition was unavailable: {Redact(remoteError.Message)}", remoteError);
         return null;
@@ -307,7 +310,7 @@ public sealed class AiProviderService
         return ExtractGeminiText(text);
     }
 
-    private async Task<string?> GeminiTranscribe(byte[] wav, AiSettings settings, string? key, CancellationToken cancellationToken)
+    private async Task<TranscriptionResult?> GeminiTranscribe(byte[] wav, AiSettings settings, string? key, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(key)) return null;
         var model = string.IsNullOrWhiteSpace(settings.Model) ? "gemini-2.0-flash" : settings.Model;
@@ -319,7 +322,7 @@ public sealed class AiProviderService
                 {
                     parts = new object[]
                     {
-                        new { text = "Transcribe this narration exactly. Return only the spoken text, preserving commands, values, conditions, and corrections. Do not summarize." },
+                        new { text = "Transcribe this narration exactly. Return JSON only in this shape: {\"segments\":[{\"startMilliseconds\":0,\"endMilliseconds\":1000,\"text\":\"spoken words\"}]}. Use the audio position for every segment, preserve commands, values, conditions, and corrections, and do not summarize." },
                         new { inlineData = new { mimeType = "audio/wav", data = Convert.ToBase64String(wav) } }
                     }
                 }
@@ -329,25 +332,75 @@ public sealed class AiProviderService
         using var response = await _http.PostAsync(endpoint, JsonContent(body), cancellationToken);
         var text = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode) throw new InvalidOperationException($"Gemini transcription returned {(int)response.StatusCode}: {Redact(text)}");
-        return ExtractGeminiText(text);
+        return ParseTranscriptionResponse(ExtractGeminiText(text), "Google Gemini transcription");
     }
 
-    private async Task<string?> OpenAiCompatibleTranscribe(byte[] wav, AiSettings settings, string? key, CancellationToken cancellationToken)
+    private async Task<TranscriptionResult?> OpenAiCompatibleTranscribe(byte[] wav, AiSettings settings, string? key, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(key)) return null;
+        try { return await OpenAiCompatibleTranscribeRequest(wav, settings, key, includeTimestamps: true, cancellationToken); }
+        catch (InvalidOperationException) { return await OpenAiCompatibleTranscribeRequest(wav, settings, key, includeTimestamps: false, cancellationToken); }
+    }
+
+    private async Task<TranscriptionResult?> OpenAiCompatibleTranscribeRequest(byte[] wav, AiSettings settings, string key, bool includeTimestamps, CancellationToken cancellationToken)
+    {
         var endpoint = Endpoint(settings).TrimEnd('/') + "/audio/transcriptions";
         using var form = new MultipartFormDataContent();
         using var audio = new ByteArrayContent(wav);
         audio.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
         form.Add(audio, "file", "recording.wav");
         form.Add(new StringContent(TranscriptionModel(settings)), "model");
+        if (includeTimestamps)
+        {
+            form.Add(new StringContent("verbose_json"), "response_format");
+            form.Add(new StringContent("segment"), "timestamp_granularities[]");
+        }
         using var request = new HttpRequestMessage(HttpMethod.Post, endpoint) { Content = form };
         AddAuth(request, settings.Provider, key);
         using var response = await _http.SendAsync(request, cancellationToken);
         var text = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode) throw new InvalidOperationException($"Transcription returned {(int)response.StatusCode}: {Redact(text)}");
-        using var json = JsonDocument.Parse(text);
-        return json.RootElement.TryGetProperty("text", out var value) ? value.GetString() : null;
+        return ParseTranscriptionResponse(text, settings.Provider + " transcription");
+    }
+
+    private static TranscriptionResult? ParseTranscriptionResponse(string raw, string source)
+    {
+        var fallback = raw.Trim();
+        try
+        {
+            using var json = JsonDocument.Parse(JsonObject(raw));
+            var root = json.RootElement;
+            var text = root.TryGetProperty("text", out var textValue) ? textValue.GetString() : null;
+            var segments = new List<TranscriptSegment>();
+            if (root.TryGetProperty("segments", out var segmentArray) && segmentArray.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var segment in segmentArray.EnumerateArray())
+                {
+                    var phrase = segment.TryGetProperty("text", out var phraseValue) ? phraseValue.GetString()?.Trim() : null;
+                    if (string.IsNullOrWhiteSpace(phrase)) continue;
+                    var start = ReadMilliseconds(segment, "startMilliseconds", "start_ms", "start");
+                    var end = ReadMilliseconds(segment, "endMilliseconds", "end_ms", "end");
+                    if (start is null || end is null || end <= start) continue;
+                    segments.Add(new TranscriptSegment(start.Value, end.Value, phrase, 0.85, source, "provider-segment"));
+                }
+            }
+            if (segments.Count > 0)
+                return new TranscriptionResult(text ?? string.Join(" ", segments.Select(segment => segment.Text)), segments, source);
+            if (!string.IsNullOrWhiteSpace(text)) return new TranscriptionResult(text.Trim(), [], source);
+        }
+        catch (JsonException) { }
+        return string.IsNullOrWhiteSpace(fallback) ? null : new TranscriptionResult(fallback, [], source);
+    }
+
+    private static long? ReadMilliseconds(JsonElement element, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (!element.TryGetProperty(name, out var value) || value.ValueKind is not (JsonValueKind.Number or JsonValueKind.String)) continue;
+            if (!value.TryGetDouble(out var number)) continue;
+            return name is "start" or "end" ? (long)Math.Round(number * 1000) : (long)Math.Round(number);
+        }
+        return null;
     }
 
     private static string ExtractGeminiText(string raw)
@@ -462,7 +515,7 @@ public static class ActionPrompt
         foreach (var action in actions)
         {
             var target = action.Target?.IsPassword == true ? "[protected field]" : action.Target?.Name ?? action.Target?.ControlType ?? "unknown";
-            prompt.AppendLine($"Action {action.Order}: actionId={action.Id}; time={action.StartMilliseconds}-{action.EndMilliseconds}ms; kind={action.Kind}; detail={action.Detail}; app={action.Target?.ProcessName}; window={action.Target?.WindowTitle}; target={target}; before={action.Before?.Id ?? "missing"}; after={action.After?.Id ?? "missing"}; narration={string.Join(" | ", action.NearbyNarration.Select(segment => segment.Text))}");
+            prompt.AppendLine($"Action {action.Order}: actionId={action.Id}; time={action.StartMilliseconds}-{action.EndMilliseconds}ms; kind={action.Kind}; detail={action.Detail}; app={action.Target?.ProcessName}; window={action.Target?.WindowTitle}; target={target}; before={action.Before?.Id ?? "missing"}; after={action.After?.Id ?? "missing"}; narration={string.Join(" | ", action.NearbyNarration.Select(segment => $"{segment.StartMilliseconds}-{segment.EndMilliseconds}ms [{segment.Timing}/{segment.Source}] {segment.Text} imageRefs={string.Join(",", segment.ReferenceFrameIds ?? [])}"))}");
         }
         prompt.AppendLine();
         prompt.AppendLine("Attached frames, in order:");
@@ -521,7 +574,7 @@ public static class CompilerPrompt
             .Select(e => $"{e.ElapsedMilliseconds}ms {e.Kind}: {e.Detail}; {TargetContext(e.Target)}; app={e.ProcessName ?? e.Target?.ProcessName}; window={e.WindowTitle ?? e.Target?.WindowTitle}; redacted={e.Redacted}"));
         var transcript = trace.Transcript.Count == 0
             ? "No transcript was available. Do not infer spoken intent from silence."
-            : string.Join('\n', trace.Transcript.Select(t => $"{t.StartMilliseconds}-{t.EndMilliseconds}ms (confidence {t.Confidence:0.00}): {t.Text}"));
+            : string.Join('\n', trace.Transcript.Select(t => $"{t.StartMilliseconds}-{t.EndMilliseconds}ms (confidence {t.Confidence:0.00}, {t.Timing}/{t.Source}, imageRefs={string.Join(",", t.ReferenceFrameIds ?? [])}): {t.Text}"));
         var notes = trace.Notes.Count == 0 ? "No recorder notes." : string.Join('\n', trace.Notes);
         var frameContext = frames is { Count: > 0 }
             ? string.Join('\n', frames.Select((frame, index) => $"Attached frame {index + 1}: id={frame.Id}, {frame.ElapsedMilliseconds}ms, role={frame.Role}, action={frame.ActionId}, reason={frame.Reason}. Use it to verify visible labels, state changes, and target identity; do not read secrets."))
@@ -529,7 +582,7 @@ public static class CompilerPrompt
         var actions = trace.Actions.Count == 0
             ? "No paired action evidence was available."
             : string.Join('\n', trace.Actions.Where(a => !a.Redacted).OrderBy(a => a.Order).Select(a =>
-                 $"Action {a.Order} id={a.Id} {a.StartMilliseconds}-{a.EndMilliseconds}ms kind={a.Kind} detail={a.Detail}; before={a.Before?.Id ?? "none"}; after={a.After?.Id ?? "none"}; narration={string.Join(" | ", a.NearbyNarration.Select(n => n.Text))}; target={TargetContext(a.Target)}; include={a.IncludeInSkill}; confidence={a.Confidence:0.00}"));
+                 $"Action {a.Order} id={a.Id} {a.StartMilliseconds}-{a.EndMilliseconds}ms kind={a.Kind} detail={a.Detail}; before={a.Before?.Id ?? "none"}; after={a.After?.Id ?? "none"}; narration={string.Join(" | ", a.NearbyNarration.Select(n => $"{n.StartMilliseconds}-{n.EndMilliseconds}ms {n.Text} imageRefs={string.Join(",", n.ReferenceFrameIds ?? [])}"))}; target={TargetContext(a.Target)}; include={a.IncludeInSkill}; confidence={a.Confidence:0.00}"));
         var interpretations = trace.Interpretations.Count == 0
             ? "No action interpretations were available."
             : string.Join('\n', trace.Interpretations.OrderBy(item => item.Order).Select(item =>

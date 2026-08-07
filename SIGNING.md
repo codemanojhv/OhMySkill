@@ -37,7 +37,7 @@ Do not put these values in source files. The account and profile are not private
 
 1. Merge the release commit into `main`.
 2. Open **Actions → Signed Windows release → Run workflow**.
-3. Select `main`, enter a semantic version such as `v0.2.1`, and choose whether it is a prerelease.
+3. Select `main`, enter a semantic version such as `v0.3.0`, and choose whether it is a prerelease.
 4. Download only the EXEs attached by the completed workflow.
 
 The workflow builds and tests the application, publishes x64 and ARM64 binaries, signs and timestamps them, rejects invalid output, generates SHA-256 checksums, and then creates the GitHub release.

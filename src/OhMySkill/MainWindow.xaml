@@ -78,6 +78,8 @@
             <Label Content="Window (used for selected-window capture)" />
             <ComboBox x:Name="WindowBox" DisplayMemberPath="Title" />
             <TextBlock Text="Microphone narration is optional but strongly recommended. It is timestamped, transcribed, and attached to nearby actions. Typed characters and clipboard contents are not persisted." Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,12,0,20" />
+            <CheckBox x:Name="BuildWithAiBox" Content="Build this skill with the configured AI provider" Foreground="{StaticResource InkBrush}" Margin="0,0,0,4" />
+            <TextBlock x:Name="AiBuildHint" Text="AI will analyze timestamped narration, referenced images, and interaction evidence. Configure a provider under AI Settings first." Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,0,0,18" />
             <StackPanel Orientation="Horizontal">
               <Button x:Name="StartRecordingButton" Content="Start Recording" Click="StartRecording_Click" Background="{StaticResource AccentDarkBrush}" />
               <Button Content="Cancel" Click="Home_Click" />
@@ -111,6 +113,26 @@
             <Border Background="#111C2D" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,0,14">
               <TextBlock x:Name="EvidenceSummary" TextWrapping="Wrap" Foreground="{StaticResource InkBrush}" />
             </Border>
+            <Label Content="Timestamped narration and image references" />
+            <TextBlock x:Name="NarrationSummary" TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,6" />
+            <TextBox x:Name="TranscriptEditorBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" ToolTip="Keep one narration segment per line. Timestamps and image references are preserved while you edit the words." TextChanged="TranscriptEditor_Changed" />
+            <ListBox x:Name="NarrationList" MaxHeight="300" Background="#0B1220" BorderBrush="{StaticResource PanelBorderBrush}" Foreground="{StaticResource InkBrush}" Margin="0,0,0,14">
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <Border BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="0,0,0,1" Padding="8">
+                    <StackPanel>
+                      <TextBlock Text="{Binding Header}" FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="0,5,0,0" />
+                      <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                        <Image Source="{Binding FrameOne}" Width="150" Height="84" Stretch="Uniform" Margin="0,0,8,0" AutomationProperties.Name="Narration reference frame one" />
+                        <Image Source="{Binding FrameTwo}" Width="150" Height="84" Stretch="Uniform" AutomationProperties.Name="Narration reference frame two" />
+                      </StackPanel>
+                      <TextBlock Text="{Binding ReferenceText}" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,5,0,0" />
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
             <Label Content="Action evidence (before / after)" />
             <ListBox x:Name="EvidenceList" MaxHeight="320" Background="#0B1220" BorderBrush="{StaticResource PanelBorderBrush}" Foreground="{StaticResource InkBrush}" Margin="0,0,0,14">
               <ListBox.ItemTemplate>
@@ -153,6 +175,7 @@
             <TextBlock x:Name="SavedPathText" Foreground="{StaticResource SuccessBrush}" TextWrapping="Wrap" Margin="0,12,0,0" />
             <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
               <Button x:Name="SaveSkillButton" Content="Save SKILL.md" Click="SaveSkill_Click" Background="{StaticResource AccentDarkBrush}" />
+              <Button x:Name="RegenerateAiButton" Content="Regenerate with AI" Click="RegenerateAi_Click" IsEnabled="False" />
               <Button x:Name="OpenOutputButton" Content="Open output folder" Click="OpenOutputFolder_Click" IsEnabled="False" />
               <Button x:Name="CopyPromptButton" Content="Copy agent prompt" Click="CopyPrompt_Click" IsEnabled="False" />
               <Button Content="Back to Home" Click="Home_Click" />

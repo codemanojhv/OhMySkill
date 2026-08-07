@@ -54,7 +54,14 @@ public sealed record TraceEvent(
     string? FramePath,
     bool Redacted = false);
 
-public sealed record TranscriptSegment(long StartMilliseconds, long EndMilliseconds, string Text, double Confidence = 1);
+public sealed record TranscriptSegment(
+    long StartMilliseconds,
+    long EndMilliseconds,
+    string Text,
+    double Confidence = 1,
+    string Source = "unknown",
+    string Timing = "estimated",
+    IReadOnlyList<string>? ReferenceFrameIds = null);
 
 public enum FrameRole
 {
