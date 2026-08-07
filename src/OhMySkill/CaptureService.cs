@@ -112,6 +112,12 @@ public sealed class MicrophoneRecorder : IDisposable
     private WaveInProc? _callback;
     private bool _running;
     private double _level;
+    private long _capturedBytes;
+    private long _callbackCount;
+    private double _peak;
+    private int _callbacksInProgress;
+    private readonly ManualResetEventSlim _callbacksIdle = new(true);
+    public string? FailureReason { get; private set; }
 
     [StructLayout(LayoutKind.Sequential)] private struct WAVEFORMATEX { public ushort FormatTag, Channels; public uint SamplesPerSec, AvgBytesPerSec; public ushort BlockAlign, BitsPerSample, Size; }
     [StructLayout(LayoutKind.Sequential)] private struct WAVEHDR { public IntPtr lpData; public uint dwBufferLength, dwBytesRecorded; public IntPtr dwUser; public uint dwFlags, dwLoops; public IntPtr lpNext, reserved; }
@@ -130,6 +136,10 @@ public sealed class MicrophoneRecorder : IDisposable
     public static bool HasInputDevice => waveInGetNumDevs() > 0;
     public bool IsAvailable => HasInputDevice;
     public double Level => Volatile.Read(ref _level);
+    public double Peak => Volatile.Read(ref _peak);
+    public long CapturedBytes => Interlocked.Read(ref _capturedBytes);
+    public long CallbackCount => Interlocked.Read(ref _callbackCount);
+    public bool HasSignal => Peak >= 0.005;
     public long CapturedMilliseconds
     {
         get
@@ -140,26 +150,51 @@ public sealed class MicrophoneRecorder : IDisposable
 
     public bool Start()
     {
-        if (!IsAvailable) return false;
+        FailureReason = null;
+        Interlocked.Exchange(ref _capturedBytes, 0);
+        Interlocked.Exchange(ref _callbackCount, 0);
+        Volatile.Write(ref _level, 0);
+        Volatile.Write(ref _peak, 0);
+        if (!IsAvailable)
+        {
+            FailureReason = "Windows reported no microphone input device.";
+            return false;
+        }
         var format = new WAVEFORMATEX { FormatTag = 1, Channels = 1, SamplesPerSec = 16000, BitsPerSample = 16, BlockAlign = 2, AvgBytesPerSec = 32000, Size = 0 };
         _callback = OnWaveMessage;
-        if (waveInOpen(out _handle, WaveMapper, ref format, _callback, IntPtr.Zero, CallbackFunction) != 0) return false;
+        var openResult = waveInOpen(out _handle, WaveMapper, ref format, _callback, IntPtr.Zero, CallbackFunction);
+        if (openResult != 0)
+        {
+            FailureReason = $"Windows microphone open failed (MMRESULT 0x{openResult:X8}).";
+            _handle = IntPtr.Zero;
+            return false;
+        }
         for (var i = 0; i < 2; i++)
         {
             var data = Marshal.AllocHGlobal(8192);
             var header = Marshal.AllocHGlobal(Marshal.SizeOf<WAVEHDR>());
             Marshal.StructureToPtr(new WAVEHDR { lpData = data, dwBufferLength = 8192 }, header, false);
             _buffers.Add(data); _headers.Add(header);
-            waveInPrepareHeader(_handle, header, (uint)Marshal.SizeOf<WAVEHDR>());
-            waveInAddBuffer(_handle, header, (uint)Marshal.SizeOf<WAVEHDR>());
+            var prepareResult = waveInPrepareHeader(_handle, header, (uint)Marshal.SizeOf<WAVEHDR>());
+            var addResult = prepareResult == 0 ? waveInAddBuffer(_handle, header, (uint)Marshal.SizeOf<WAVEHDR>()) : prepareResult;
+            if (addResult != 0)
+            {
+                FailureReason = $"Windows microphone buffer setup failed (MMRESULT 0x{addResult:X8}).";
+                StopAndGetWav();
+                return false;
+            }
         }
-        _running = waveInStart(_handle) == 0;
+        var startResult = waveInStart(_handle);
+        _running = startResult == 0;
+        if (!_running) FailureReason = $"Windows microphone start failed (MMRESULT 0x{startResult:X8}).";
         return _running;
     }
 
     private void OnWaveMessage(IntPtr _, uint message, IntPtr __, IntPtr headerPtr, IntPtr ___)
     {
         if (message != MmWimData || headerPtr == IntPtr.Zero) return;
+        Interlocked.Increment(ref _callbacksInProgress);
+        _callbacksIdle.Reset();
         try
         {
             var header = Marshal.PtrToStructure<WAVEHDR>(headerPtr);
@@ -171,11 +206,23 @@ public sealed class MicrophoneRecorder : IDisposable
                 for (var index = 0; index + 1 < bytes.Length; index += 8)
                     peak = Math.Max(peak, Math.Abs((int)BitConverter.ToInt16(bytes, index)));
                 Volatile.Write(ref _level, peak / 32768d);
+                if (peak > 0) Interlocked.Increment(ref _callbackCount);
+                Interlocked.Add(ref _capturedBytes, bytes.Length);
+                var normalizedPeak = peak / 32768d;
+                while (true)
+                {
+                    var current = Volatile.Read(ref _peak);
+                    if (normalizedPeak <= current || Interlocked.CompareExchange(ref _peak, normalizedPeak, current) == current) break;
+                }
                 lock (_gate) _pcm.Write(bytes, 0, bytes.Length);
             }
             if (_running) waveInAddBuffer(_handle, headerPtr, (uint)Marshal.SizeOf<WAVEHDR>());
         }
-        catch { }
+        catch (Exception ex) { FailureReason ??= "Windows microphone callback failed: " + ex.Message; }
+        finally
+        {
+            if (Interlocked.Decrement(ref _callbacksInProgress) == 0) _callbacksIdle.Set();
+        }
     }
 
     public byte[] StopAndGetWav()
@@ -185,19 +232,22 @@ public sealed class MicrophoneRecorder : IDisposable
             _running = false;
             waveInStop(_handle);
             waveInReset(_handle);
+            _callbacksIdle.Wait(TimeSpan.FromSeconds(1));
             foreach (var header in _headers) waveInUnprepareHeader(_handle, header, (uint)Marshal.SizeOf<WAVEHDR>());
             waveInClose(_handle);
             _handle = IntPtr.Zero;
         }
-        var pcm = _pcm.ToArray();
+        byte[] pcm;
+        lock (_gate) pcm = _pcm.ToArray();
         using var output = new MemoryStream();
         using var writer = new BinaryWriter(output, Encoding.ASCII, true);
         writer.Write(Encoding.ASCII.GetBytes("RIFF")); writer.Write(36 + pcm.Length); writer.Write(Encoding.ASCII.GetBytes("WAVE"));
         writer.Write(Encoding.ASCII.GetBytes("fmt ")); writer.Write(16); writer.Write((short)1); writer.Write((short)1); writer.Write(16000); writer.Write(32000); writer.Write((short)2); writer.Write((short)16);
         writer.Write(Encoding.ASCII.GetBytes("data")); writer.Write(pcm.Length); writer.Write(pcm);
         foreach (var ptr in _buffers) Marshal.FreeHGlobal(ptr);
-        foreach (var ptr in _headers) { Marshal.FreeHGlobal(ptr); }
-        _buffers.Clear(); _headers.Clear(); _pcm.SetLength(0);
+        foreach (var ptr in _headers) Marshal.FreeHGlobal(ptr);
+        _buffers.Clear(); _headers.Clear();
+        lock (_gate) _pcm.SetLength(0);
         return output.ToArray();
     }
 
@@ -227,7 +277,11 @@ public sealed class RecordingController : IDisposable
     public string TemporaryFolder => _store.Folder;
     public byte[] AudioWav { get; private set; } = [];
     public double MicrophoneLevel => _microphone.Level;
+    public double MicrophonePeak => _microphone.Peak;
+    public bool MicrophoneHasSignal => _microphone.HasSignal;
+    public long CapturedAudioBytes => _microphone.CapturedBytes;
     public long CapturedAudioMilliseconds => _microphone.CapturedMilliseconds;
+    public string? MicrophoneFailureReason => _microphone.FailureReason;
     public int ActionCount => Trace.Actions.Count;
     public int BufferedFrameCount { get { lock (_gate) return _rollingFrames.Count; } }
     public event Action<TraceEvent>? EventRecorded;
@@ -246,7 +300,8 @@ public sealed class RecordingController : IDisposable
         _clock.Start();
         Trace.Events.Add(new TraceEvent(0, TraceEventKind.SessionStarted, "Recording started", null, null, null, null));
         Trace.HasAudio = _microphone.Start();
-        if (!Trace.HasAudio) Trace.Notes.Add("No microphone was available; narration cannot be transcribed.");
+        if (!Trace.HasAudio) Trace.Notes.Add(_microphone.FailureReason ?? "No microphone was available; narration cannot be transcribed.");
+        else Trace.Notes.Add("Microphone opened at 16 kHz, 16-bit mono; narration timing is anchored to captured sample position.");
         CaptureAndStoreFrame("initial", FrameRole.Initial);
         _captureTimer.Change(250, 250);
     }
@@ -415,15 +470,45 @@ public sealed class RecordingController : IDisposable
 
     public void AttachTranscript(IReadOnlyList<TranscriptSegment> segments)
     {
+        var annotated = segments
+            .Select(segment => segment with
+            {
+                ReferenceFrameIds = segment.ReferenceFrameIds is { Count: > 0 }
+                    ? segment.ReferenceFrameIds
+                    : ReferenceFramesFor(segment.StartMilliseconds, segment.EndMilliseconds)
+            })
+            .ToArray();
+        Trace.Transcript.Clear();
+        Trace.Transcript.AddRange(annotated);
         Trace.Evidence.ActionsWithNarration = 0;
         for (var i = 0; i < Trace.Actions.Count; i++)
         {
             var action = Trace.Actions[i];
             if (action.Redacted) continue;
-            var nearby = segments.Where(s => s.EndMilliseconds >= action.StartMilliseconds - 5000 && s.StartMilliseconds <= action.EndMilliseconds + 5000).ToArray();
+            var nearby = annotated.Where(s => s.EndMilliseconds >= action.StartMilliseconds - 5000 && s.StartMilliseconds <= action.EndMilliseconds + 5000).ToArray();
             Trace.Actions[i] = action with { NearbyNarration = nearby };
             if (nearby.Length > 0) Trace.Evidence.ActionsWithNarration++;
         }
+    }
+
+    private IReadOnlyList<string> ReferenceFramesFor(long startMilliseconds, long endMilliseconds)
+    {
+        var midpoint = startMilliseconds + Math.Max(0, endMilliseconds - startMilliseconds) / 2;
+        var candidates = Trace.Actions
+            .Where(action => !action.Redacted)
+            .SelectMany(action => new[] { action.Before, action.After })
+            .Where(frame => frame?.Id is not null)
+            .Select(frame => (Id: frame!.Id!, Time: frame.ElapsedMilliseconds))
+            .Concat(Trace.Events
+                .Where(item => !item.Redacted && item.Kind == TraceEventKind.KeyFrame && item.FramePath is not null)
+                .Select(item => (Id: item.FramePath!, Time: item.ElapsedMilliseconds)))
+            .GroupBy(frame => frame.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .OrderBy(frame => Math.Abs(frame.Time - midpoint))
+            .Take(4)
+            .Select(frame => frame.Id)
+            .ToArray();
+        return candidates;
     }
 
     public IReadOnlyList<FrameEvidence> ReadFrameEvidence(int maxFrames = int.MaxValue)
@@ -507,6 +592,10 @@ public sealed class RecordingController : IDisposable
         CaptureAndStoreFrame("final", FrameRole.Final);
         Trace.Events.Add(new TraceEvent(_clock.ElapsedMilliseconds, TraceEventKind.SessionStopped, "Recording finished", null, null, null, null));
         AudioWav = _microphone.StopAndGetWav();
+        if (Trace.HasAudio && AudioWav.Length <= 44)
+            Trace.Notes.Add("The microphone opened but returned no PCM samples. Check Windows microphone privacy access and the selected input device.");
+        else if (Trace.HasAudio && !MicrophoneHasSignal)
+            Trace.Notes.Add("Microphone samples were captured but the measured peak was near silence; narration may be too quiet to transcribe.");
         if (AudioWav.Length > 44) BuildAudioChunks(AudioWav);
         _store.WriteAudio(AudioWav);
         _store.WriteTrace(Trace);

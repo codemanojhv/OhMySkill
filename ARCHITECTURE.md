@@ -1,4 +1,4 @@
-# Oh My Skill v0.2.1 architecture
+# Oh My Skill v0.3.0 architecture
 
 Oh My Skill records a narrated Windows workflow, pairs every logical interaction with before/after screen evidence, and stops after saving a reviewed local `SKILL.md` plus a universal agent prompt.
 

@@ -19,6 +19,15 @@ public partial class MainWindow : Window
         public string Interpretation { get; init; } = "Not interpreted.";
     }
 
+    private sealed class NarrationPreview
+    {
+        public string Header { get; init; } = "";
+        public string Text { get; init; } = "";
+        public BitmapImage? FrameOne { get; init; }
+        public BitmapImage? FrameTwo { get; init; }
+        public string ReferenceText { get; init; } = "No nearby image reference.";
+    }
+
     private readonly DispatcherTimer _uiTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
     private readonly AiProviderService _provider = new();
     private readonly RawInputObserver _input = new();
@@ -34,6 +43,8 @@ public partial class MainWindow : Window
     private CancellationTokenSource? _workflowCts;
     private bool _isBusy;
     private bool _loadingDraft;
+    private bool _loadingTranscript;
+    private IReadOnlyDictionary<string, BitmapImage?> _narrationFrameImages = new Dictionary<string, BitmapImage?>(StringComparer.OrdinalIgnoreCase);
 
     public MainWindow()
     {
@@ -131,11 +142,21 @@ public partial class MainWindow : Window
         SavedPathText.Text = "";
         OpenOutputButton.IsEnabled = false;
         CopyPromptButton.IsEnabled = false;
+        BuildWithAiBox.IsChecked = _settings.UseAi || HasConfiguredAi(_settings);
         var microphone = MicrophoneRecorder.HasInputDevice ? "available" : "not detected (narration will be unavailable)";
         var windowText = _windows.Count == 0 ? "No titled windows were found; use entire-display capture." : $"{_windows.Count} selectable windows found.";
         SetupPreflight.Text = $"Windows capture ready. Microphone: {microphone}. {windowText} AI is optional and can be configured under AI Settings.";
+        AiBuildHint.Text = BuildAiHint();
         SetPanel(SetupPanel);
         SetStatus("Setup");
+    }
+
+    private string BuildAiHint()
+    {
+        if (!BuildWithAiBox.IsChecked.GetValueOrDefault()) return "Local draft mode: the app will still attach timestamped narration and image references for review.";
+        if (_settings.Provider.StartsWith("None", StringComparison.OrdinalIgnoreCase)) return "Choose a provider under AI Settings to enable multimodal skill generation.";
+        if (string.IsNullOrWhiteSpace(SettingsStore.GetApiKey(_settings))) return $"{_settings.Provider} is selected but no API key is saved. The app will fall back to the local draft until you configure it.";
+        return $"AI mode: {_settings.Provider} will analyze timestamped narration, referenced images, and interaction evidence before writing the draft.";
     }
 
     private void Settings_Click(object sender, RoutedEventArgs e)
@@ -202,7 +223,9 @@ public partial class MainWindow : Window
             _input.Attach(source, recording);
             await Task.Run(recording.Start);
             _recordingStarted = DateTimeOffset.Now;
-            AudioStatus.Text = recording.Trace.HasAudio ? "Microphone: capturing narration" : "Microphone: unavailable (audio will be missing)";
+            AudioStatus.Text = recording.Trace.HasAudio
+                ? "Microphone: capturing narration at 16 kHz mono"
+                : $"Microphone: unavailable ({recording.MicrophoneFailureReason ?? "narration will be missing"})";
             RecordingStatus.Text = recording.Trace.HasAudio ? "Recording screen, microphone, and interaction context..." : "Recording screen and interaction context. No microphone was available.";
             SetBusy(false);
             SetStatus("Recording");
@@ -240,7 +263,7 @@ public partial class MainWindow : Window
         RecordingTimer.Text = elapsed.ToString(@"mm\:ss");
         RecordingStats.Text = $"{_recording.ActionCount} actions - {_recording.BufferedFrameCount} buffered frames - {_recording.CapturedAudioMilliseconds / 1000.0:0}s audio";
         if (_recording.Trace.HasAudio)
-            AudioStatus.Text = $"Microphone: capturing narration - level {_recording.MicrophoneLevel:P0}";
+            AudioStatus.Text = $"Microphone: capturing narration - level {_recording.MicrophoneLevel:P0}, peak {_recording.MicrophonePeak:P0}, {_recording.CapturedAudioBytes / 1024.0:0} KB";
     }
 
     private void MarkStep_Click(object sender, RoutedEventArgs e)
@@ -270,9 +293,12 @@ public partial class MainWindow : Window
         SetBusy(true, "Finishing recording", "Waiting for stable after-action frames and closing the microphone...", true);
         _workflowCts = new CancellationTokenSource();
         var cancellationToken = _workflowCts.Token;
+        var processingSettings = BuildProcessingSettings();
         var trace = completed.Trace;
         IReadOnlyList<FrameEvidence> frames = [];
         IReadOnlyList<ActionEvidence> actions = [];
+        IReadOnlyList<AudioWindowEvidence> audioWindows = [];
+        var frameCount = 0;
 
         try
         {
@@ -282,7 +308,7 @@ public partial class MainWindow : Window
             var audioTask = Task.Run(() => completed.ReadAudioWindows());
             await Task.WhenAll(evidenceTask, audioTask);
             frames = await evidenceTask;
-            var audioWindows = await audioTask;
+            audioWindows = await audioTask;
             var transcriptionSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             if (completed.AudioWav.Length > 44 && audioWindows.Count > 0)
@@ -294,11 +320,14 @@ public partial class MainWindow : Window
                         cancellationToken.ThrowIfCancellationRequested();
                         var window = audioWindows[index];
                         SetBusy(true, "Transcribing narration", $"Processing audio window {index + 1} of {audioWindows.Count}...", true);
-                        var transcript = await _provider.TranscribeAsync(window.Wav, _settings, cancellationToken);
-                        transcriptionSources.Add(_provider.LastTranscriptionSource);
-                        if (string.IsNullOrWhiteSpace(transcript)) continue;
+                        var transcription = await _provider.TranscribeDetailedAsync(window.Wav, processingSettings, cancellationToken);
+                        if (transcription is null || string.IsNullOrWhiteSpace(transcription.Text)) continue;
+                        transcriptionSources.Add(transcription.Source);
                         var duration = Math.Max(1000, (window.Wav.Length - 44) / 32L);
-                        var segments = TranscriptSegmenter.Split(transcript, duration, _settings.UseAi ? 0.85 : 0.65)
+                        var relativeSegments = transcription.Segments.Count > 0
+                            ? transcription.Segments
+                            : TranscriptSegmenter.Split(transcription.Text, duration, processingSettings.UseAi ? 0.85 : 0.65, transcription.Source);
+                        var segments = relativeSegments
                             .Select(segment => segment with
                             {
                                 StartMilliseconds = segment.StartMilliseconds + window.StartMilliseconds,
@@ -310,6 +339,8 @@ public partial class MainWindow : Window
                     if (trace.Transcript.Count > 0)
                     {
                         trace.Evidence.AudioMode = string.Join(" + ", transcriptionSources.Where(source => source != "Unavailable"));
+                        if (trace.Transcript.All(segment => segment.Timing != "provider-segment"))
+                            trace.Evidence.Warnings.Add("The transcription provider returned text without word/segment timestamps; times were estimated across each audio window.");
                         trace.Notes.Add($"Narration was transcribed with {trace.Evidence.AudioMode} in timestamped windows and attached to nearby actions.");
                     }
                     else trace.Notes.Add("Narration was captured, but no transcript was available.");
@@ -335,7 +366,7 @@ public partial class MainWindow : Window
                         BusyDetail.Text = message;
                     });
                     SetBusy(true, "Building draft", "Interpreting every action pair with the available narration...", true);
-                    var aiDraft = await _provider.GenerateDraftAsync(trace, _settings, frames, audioWindows, progress, cancellationToken);
+                    var aiDraft = await _provider.GenerateDraftAsync(trace, processingSettings, frames, audioWindows, progress, cancellationToken);
                     if (aiDraft is not null) _draft = aiDraft;
                 }
                 catch (OperationCanceledException)
@@ -349,6 +380,8 @@ public partial class MainWindow : Window
             }
 
             var evidenceSummary = BuildEvidenceSummary(trace, frames);
+            frameCount = frames.Count;
+            PopulateNarrationReview(trace, frames);
             // Release the provider payload before loading UI thumbnails; this keeps long sessions bounded.
             frames = Array.Empty<FrameEvidence>();
             audioWindows = Array.Empty<AudioWindowEvidence>();
@@ -358,7 +391,7 @@ public partial class MainWindow : Window
             actions = Array.Empty<ActionEvidence>();
             EvidenceSummary.Text = evidenceSummary;
             LoadDraftIntoReview(_draft);
-            ReviewStatus.Text = BuildReviewStatus(trace, frames, cancellationToken.IsCancellationRequested);
+            ReviewStatus.Text = BuildReviewStatus(trace, frameCount, cancellationToken.IsCancellationRequested);
             SetBusy(false);
             SetStatus("Review");
         }
@@ -367,6 +400,7 @@ public partial class MainWindow : Window
             _draft ??= DraftFactory.FromTrace(trace);
             actions = await Task.Run(completed.ReadActionEvidence);
             EvidenceList.ItemsSource = actions.Select(action => BuildActionPreview(action, trace.Interpretations.FirstOrDefault(item => item.ActionId == action.Id))).ToArray();
+            PopulateNarrationReview(trace, frames);
             EvidenceSummary.Text = BuildEvidenceSummary(trace, frames);
             LoadDraftIntoReview(_draft);
             ReviewStatus.Text = "Processing was canceled. The local evidence draft is ready; review it before saving.";
@@ -391,10 +425,10 @@ public partial class MainWindow : Window
         }
     }
 
-    private static string BuildReviewStatus(RecordingTrace trace, IReadOnlyList<FrameEvidence> frames, bool canceled)
+    private static string BuildReviewStatus(RecordingTrace trace, int frameCount, bool canceled)
     {
         var audio = trace.Transcript.Count > 0 ? trace.Evidence.AudioMode : trace.HasAudio ? "captured but unavailable to transcribe" : "unavailable";
-        return $"Used {trace.Actions.Count} paired actions, {frames.Count} visual frames, and {audio}. {(canceled ? "AI processing was canceled; " : "")}Review every step before saving.";
+        return $"Used {trace.Actions.Count} paired actions, {frameCount} visual frames, and {audio}. {(canceled ? "AI processing was canceled; " : "")}Review every step before saving.";
     }
 
     private static string BuildEvidenceSummary(RecordingTrace trace, IReadOnlyList<FrameEvidence> frames)
@@ -402,13 +436,19 @@ public partial class MainWindow : Window
         var pairCount = trace.Actions.Count(a => a.Before is not null && a.After is not null && !a.Redacted);
         var words = trace.Transcript.Sum(t => t.Text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length);
         var audio = trace.Transcript.Count > 0 ? trace.Evidence.AudioMode : trace.HasAudio ? "captured but unavailable to transcribe" : "unavailable";
+        var exact = trace.Transcript.Count(t => t.Timing == "provider-segment");
+        var estimated = trace.Transcript.Count(t => t.Timing == "estimated-window");
+        var imageRefs = trace.Transcript.Sum(t => t.ReferenceFrameIds?.Count ?? 0);
+        var audioMilliseconds = trace.AudioChunks.Sum(chunk => Math.Max(0, chunk.EndMilliseconds - chunk.StartMilliseconds));
         var warnings = trace.Evidence.Warnings.Count == 0 ? "No evidence downgrade reported." : "Warnings: " + string.Join(" | ", trace.Evidence.Warnings);
-        return $"Evidence captured: {trace.Actions.Count} actions - {pairCount} before/after pairs - {frames.Count} frames - {words} narrated words - {trace.Interpretations.Count} action interpretations\nAudio: {audio} - Vision: {trace.Evidence.VisionMode} - Provider: {trace.Evidence.Provider}\n{warnings}";
+        return $"Evidence captured: {trace.Actions.Count} actions - {pairCount} before/after pairs - {frames.Count} frames - {words} narrated words - {trace.Interpretations.Count} action interpretations\nAudio: {audio} ({FormatTime(audioMilliseconds)}) - Vision: {trace.Evidence.VisionMode} - Provider: {trace.Evidence.Provider}\nNarration timing: {exact} provider-timed, {estimated} estimated - {imageRefs} image references\n{warnings}";
     }
 
     private static ActionPreview BuildActionPreview(ActionEvidence action, ActionUnderstanding? understanding)
     {
-        var narration = action.NearbyNarration.Count == 0 ? "No nearby narration." : string.Join(" ", action.NearbyNarration.Select(n => n.Text));
+        var narration = action.NearbyNarration.Count == 0
+            ? "No nearby narration."
+            : string.Join(" ", action.NearbyNarration.Select(n => $"[{FormatTime(n.StartMilliseconds)}-{FormatTime(n.EndMilliseconds)}] {n.Text} (images: {string.Join(", ", n.ReferenceFrameIds ?? [])})"));
         return new ActionPreview
         {
             Header = $"{action.Order}. {action.Kind} - {action.StartMilliseconds}-{action.EndMilliseconds} ms - confidence {action.Confidence:0.00}",
@@ -419,6 +459,140 @@ public partial class MainWindow : Window
                 ? "Local evidence only; edit the draft if this action was misunderstood."
                 : $"{(understanding.IncludeInSkill ? "Include" : "Exclude")} - {understanding.Instruction} Expected: {understanding.ExpectedResult} Confidence {understanding.Confidence:0.00}"
         };
+    }
+
+    private AiSettings BuildProcessingSettings() => new()
+    {
+        Provider = _settings.Provider,
+        Endpoint = _settings.Endpoint,
+        Model = _settings.Model,
+        EncryptedApiKey = _settings.EncryptedApiKey,
+        UseAi = BuildWithAiBox.IsChecked == true
+    };
+
+    private static bool HasConfiguredAi(AiSettings settings) =>
+        !settings.Provider.StartsWith("None", StringComparison.OrdinalIgnoreCase) &&
+        !string.IsNullOrWhiteSpace(SettingsStore.GetApiKey(settings));
+
+    private void PopulateNarrationReview(RecordingTrace trace, IReadOnlyList<FrameEvidence> frames)
+    {
+        var referencedIds = trace.Transcript.SelectMany(segment => segment.ReferenceFrameIds ?? []).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _narrationFrameImages = frames
+            .Where(frame => frame.Id is not null && referencedIds.Contains(frame.Id))
+            .GroupBy(frame => frame.Id!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => ToBitmap(group.First().Png), StringComparer.OrdinalIgnoreCase);
+        _loadingTranscript = true;
+        try { TranscriptEditorBox.Text = string.Join(Environment.NewLine, trace.Transcript.Select(segment => segment.Text)); }
+        finally { _loadingTranscript = false; }
+        RefreshNarrationReview(trace);
+        RegenerateAiButton.IsEnabled = HasConfiguredAi(BuildProcessingSettings());
+    }
+
+    private void RefreshNarrationReview(RecordingTrace trace)
+    {
+        NarrationSummary.Text = BuildNarrationSummary(trace);
+        NarrationList.ItemsSource = trace.Transcript.Select(segment => BuildNarrationPreview(segment, _narrationFrameImages)).ToArray();
+    }
+
+    private static string BuildNarrationSummary(RecordingTrace trace)
+    {
+        var exact = trace.Transcript.Count(segment => segment.Timing == "provider-segment");
+        var estimated = trace.Transcript.Count(segment => segment.Timing == "estimated-window");
+        var references = trace.Transcript.Sum(segment => segment.ReferenceFrameIds?.Count ?? 0);
+        if (!trace.HasAudio) return "No microphone audio was captured. Add narration next time for stronger intent and correction evidence.";
+        if (trace.Transcript.Count == 0) return "Microphone audio was captured, but no transcript is available. Check microphone privacy access or retry with a configured transcription provider.";
+        return $"{trace.Transcript.Count} narration segments, {exact} provider-timed and {estimated} estimated, linked to {references} nearby image references. Edit one line per segment before rebuilding with AI.";
+    }
+
+    private static NarrationPreview BuildNarrationPreview(TranscriptSegment segment, IReadOnlyDictionary<string, BitmapImage?> images)
+    {
+        var ids = segment.ReferenceFrameIds ?? [];
+        var imageValues = ids.Select(id => images.TryGetValue(id, out var image) ? image : null).Where(image => image is not null).Take(2).ToArray();
+        return new NarrationPreview
+        {
+            Header = $"[{FormatTime(segment.StartMilliseconds)} - {FormatTime(segment.EndMilliseconds)}] {segment.Timing} / {segment.Source} (confidence {segment.Confidence:0.00})",
+            Text = segment.Text,
+            FrameOne = imageValues.ElementAtOrDefault(0),
+            FrameTwo = imageValues.ElementAtOrDefault(1),
+            ReferenceText = ids.Count == 0 ? "No nearby image reference." : $"Image references: {string.Join(", ", ids)}"
+        };
+    }
+
+    private void TranscriptEditor_Changed(object sender, TextChangedEventArgs e)
+    {
+        if (_loadingTranscript || _completedRecording is null) return;
+        var trace = _completedRecording.Trace;
+        var lines = TranscriptEditorBox.Text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        var updated = trace.Transcript.Select((segment, index) =>
+            index < lines.Length && !string.IsNullOrWhiteSpace(lines[index])
+                ? segment with { Text = lines[index].Trim() }
+                : segment).ToArray();
+        _completedRecording.AttachTranscript(updated);
+        RefreshNarrationReview(trace);
+        UpdateMarkdownPreview();
+    }
+
+    private async void RegenerateAi_Click(object sender, RoutedEventArgs e)
+    {
+        if (_completedRecording is null || _isBusy) return;
+        var settings = BuildProcessingSettings();
+        if (!HasConfiguredAi(settings))
+        {
+            ReviewStatus.Text = "Configure and save an AI provider key before rebuilding with AI.";
+            return;
+        }
+
+        var completed = _completedRecording;
+        var trace = completed.Trace;
+        _workflowCts = new CancellationTokenSource();
+        var token = _workflowCts.Token;
+        IReadOnlyList<FrameEvidence> frames = [];
+        IReadOnlyList<AudioWindowEvidence> audioWindows = [];
+        try
+        {
+            SetBusy(true, "Rebuilding with AI", "Loading the edited transcript, image pairs, and audio windows...", true);
+            var frameTask = Task.Run(() => completed.ReadFrameEvidence(), token);
+            var audioTask = Task.Run(() => completed.ReadAudioWindows(), token);
+            await Task.WhenAll(frameTask, audioTask);
+            frames = await frameTask;
+            audioWindows = await audioTask;
+            var progress = new Progress<string>(message =>
+            {
+                ReviewStatus.Text = message;
+                BusyDetail.Text = message;
+            });
+            _draft = await _provider.GenerateDraftAsync(trace, settings, frames, audioWindows, progress, token) ?? DraftFactory.FromTrace(trace);
+            var actions = await Task.Run(completed.ReadActionEvidence, token);
+            EvidenceList.ItemsSource = actions.Select(action => BuildActionPreview(action, trace.Interpretations.FirstOrDefault(item => item.ActionId == action.Id))).ToArray();
+            EvidenceSummary.Text = BuildEvidenceSummary(trace, frames);
+            LoadDraftIntoReview(_draft);
+            ReviewStatus.Text = BuildReviewStatus(trace, frames.Count, false) + " AI rebuilt the draft from the edited evidence.";
+            SetBusy(false);
+            SetStatus("Review");
+        }
+        catch (OperationCanceledException)
+        {
+            ReviewStatus.Text = "AI rebuild was canceled. The previous draft and captured evidence remain available.";
+            SetBusy(false);
+            SetStatus("Review");
+        }
+        catch (Exception ex)
+        {
+            ReviewStatus.Text = "AI rebuild failed; the previous draft remains available. " + ex.Message;
+            SetBusy(false);
+            SetStatus("Review");
+        }
+        finally
+        {
+            _workflowCts.Dispose();
+            _workflowCts = null;
+        }
+    }
+
+    private static string FormatTime(long milliseconds)
+    {
+        var time = TimeSpan.FromMilliseconds(Math.Max(0, milliseconds));
+        return time.TotalHours >= 1 ? time.ToString(@"hh\:mm\:ss\.fff") : time.ToString(@"mm\:ss\.fff");
     }
 
     private static BitmapImage? ToBitmap(byte[]? bytes)
