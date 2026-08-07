@@ -37,6 +37,15 @@ public static class SelfCheck
             Assert(evidencePrompt.Contains("imageRefs=before-1,after-1", StringComparison.Ordinal), "timestamped image references in compiler prompt");
             Assert(ActionPrompt.Build(evidenceTrace.Actions, [evidenceFrame, evidenceFrame with { Id = "after-1", Role = FrameRole.After, ElapsedMilliseconds = 400 }], false).Contains("imageRefs=before-1,after-1", StringComparison.Ordinal), "timestamped image references in action prompt");
             Assert(ActionPrompt.Build(evidenceTrace.Actions, [evidenceFrame], false).Contains(actionId.ToString(), StringComparison.Ordinal), "action batch evidence mapping");
+            var providerHandler = new FakeProviderHandler(actionId);
+            using (var providerHttp = new HttpClient(providerHandler))
+            {
+                var provider = new AiProviderService(providerHttp);
+                var providerSettings = new AiSettings { Provider = "OpenAI", Endpoint = "https://fake.local/v1", Model = "test-model", UseAi = true, EncryptedApiKey = SecretBox.Protect("test-key") };
+                var providerDraft = provider.GenerateDraftAsync(evidenceTrace, providerSettings, [evidenceFrame, evidenceFrame with { Id = "after-1", Role = FrameRole.After, ElapsedMilliseconds = 400 }], [new AudioWindowEvidence(0, 1000, new byte[64])]).GetAwaiter().GetResult();
+                Assert(providerDraft is not null, "AI provider draft parsing");
+                Assert(providerHandler.SawImage && providerHandler.SawAudio, "AI provider rich evidence payload");
+            }
             var passwordTarget = new UiTarget("app", "window", "Password", null, "Edit", null, null, [], 0, 0, 10, 10, true, true);
             var protectedAction = evidenceTrace.Actions[0] with { Kind = TraceEventKind.TextEntry, Target = passwordTarget, Detail = "text entered in protected field" };
             Assert(!ActionUnderstandingFactory.FromAction(protectedAction).Instruction.Contains("Password", StringComparison.Ordinal), "protected text action");
@@ -82,5 +91,35 @@ public static class SelfCheck
         using var stream = new MemoryStream();
         bitmap.Save(stream, ImageFormat.Png);
         return stream.ToArray();
+    }
+
+    private sealed class FakeProviderHandler(Guid actionId) : HttpMessageHandler
+    {
+        public bool SawImage { get; private set; }
+        public bool SawAudio { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken);
+            SawImage |= body.Contains("data:image/png;base64", StringComparison.Ordinal);
+            SawAudio |= body.Contains("input_audio", StringComparison.Ordinal);
+            var content = body.Contains("Interpret each demonstrated", StringComparison.Ordinal)
+                ? JsonSerializer.Serialize(new { actions = new[] { new { actionId, order = 1, includeInSkill = true, userIntent = "Open the report", instruction = "Open the report.", visibleBefore = "The report is visible.", observedChange = "The report opens.", expectedResult = "The report is open.", possibleMistake = (string?)null, confidence = 0.9, uncertainty = (string?)null } } })
+                : JsonSerializer.Serialize(new SkillDraft
+                {
+                    Name = "evidence-test",
+                    Title = "Evidence test",
+                    Description = "Open the report when the user asks to review it.",
+                    Intent = "Review the report.",
+                    Goal = "Open the report and verify it is visible.",
+                    Preconditions = ["The report is available."],
+                    Procedure = [new SkillStep(1, "Open the report.", "report", "The report is visible.")],
+                    Safety = ["Ask before sending or publishing."],
+                    Verification = ["Confirm the report is visible."],
+                    Recovery = ["If the report is missing, ask the user."]
+                });
+            var envelope = JsonSerializer.Serialize(new { choices = new[] { new { message = new { content } } } });
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(envelope, Encoding.UTF8, "application/json") };
+        }
     }
 }
